@@ -1,8 +1,8 @@
 # Dependencies
 
-Every dependency must be **free and open source** (hard constraint 1). Versions are pinned exactly; the lock files (`backend/requirements.lock`, `frontend/package-lock.json`) are the final word. Update this file whenever a package is added or upgraded, and ask before adding anything not listed in `CLAUDE.md`.
+Every dependency must be **free and open source** (hard constraint 1). Versions are pinned exactly; the lock files (`backend/requirements.lock`, `backend/requirements-dev.lock`, `frontend/package-lock.json`) are the final word. Update this file whenever a package is added or upgraded, and ask before adding anything not listed in `CLAUDE.md`.
 
-Versions below are the current stable releases on 12 November 2026. "Week" is when the package is first installed; a later-week package is re-checked for a newer stable version when it is added.
+**Registry check:** every Week 1 version below was confirmed against PyPI (`pip index versions`) and npm (`npm view`) on **2026-11-12**, immediately before installing. Packages for later weeks show the latest version on that date and are re-checked when they are added.
 
 ## Backend (Python 3.12)
 
@@ -15,9 +15,10 @@ Versions below are the current stable releases on 12 November 2026. "Week" is wh
 | alembic | 1.20.1 | MIT | 1 | Migrations |
 | psycopg[binary] | 3.3.9 | LGPL-3.0-only | 1 | PostgreSQL driver (used unmodified as a library) |
 | uvicorn | 0.54.0 | BSD-3-Clause | 1 | ASGI server |
+| tzdata | 2026.6 | Apache-2.0 | 1 | IANA time zones on Windows (`Asia/Kolkata`; never a hardcoded offset) |
 | httpx | 0.28.1 | BSD-3-Clause | 1 | Test client (dev) |
 | pytest | 9.2.0 | MIT | 1 | Tests (dev) |
-| ruff | 0.17.4 | MIT | 1 | Lint and format (dev) |
+| ruff | 0.17.5 | MIT | 1 | Lint and format (dev) |
 | mypy | 2.4.1 | MIT | 1 | Type checks (dev) |
 | pip-audit | 2.10.1 | Apache-2.0 | 1 | Vulnerability audit (dev) |
 | argon2-cffi | 25.1.0 | MIT | 2 | Password hashing |
@@ -32,27 +33,46 @@ Versions below are the current stable releases on 12 November 2026. "Week" is wh
 | openpyxl | 3.1.5 | MIT | 7 | Bank statement XLSX, Excel export |
 | pywebpush | 2.5.0 | MPL-2.0 | 7 | Web Push |
 
-## Frontend (Node 24)
+Transitive runtime packages (Starlette, anyio, Mako, python-dotenv and others) are pinned in `requirements.lock`.
+
+**Known notice:** Starlette now prints a deprecation warning that its test client should move from `httpx` to `httpx2`. Tests still pass. Switching needs approval because `httpx2` is a new package (open question for the agency lead).
+
+## Frontend (Node 24 or newer)
 
 | Package | Version | Licence | Week | Purpose |
 | --- | --- | --- | --- | --- |
 | react, react-dom | 19.3.1 | MIT | 1 | UI |
-| typescript | 6.0.3 | Apache-2.0 | 1 | Types. 7.0.2 is newer, but `typescript-eslint` 8.72 supports only `<6.1` |
-| vite | 8.3.8 | MIT | 1 | Dev server and build |
-| tailwindcss, @tailwindcss/vite | 4.3.5 | MIT | 1 | Styles |
 | react-router | 8.5.1 | MIT | 1 | Routing |
 | @tanstack/react-query | 5.107.1 | MIT | 1 | Server state |
-| react-hook-form | 7.92.0 | MIT | 1 | Forms |
-| zod | 4.6.7 | MIT | 1 | Schemas |
+| typescript | 6.0.3 | Apache-2.0 | 1 | Types. 7.0.2 is newer, but `typescript-eslint` 8.72 supports only `<6.1` |
+| vite | 8.3.8 | MIT | 1 | Dev server and build |
+| @vitejs/plugin-react | 6.3.0 | MIT | 1 | React support for Vite |
+| tailwindcss, @tailwindcss/vite | 4.3.5 | MIT | 1 | Styles |
 | vitest | 5.1.0 | MIT | 1 | Tests (dev) |
+| jsdom | 31.0.0 | MIT | 1 | Browser environment for tests (dev) |
 | @testing-library/react | 16.3.3 | MIT | 1 | Component tests (dev) |
+| @testing-library/dom | 10.4.2 | MIT | 1 | Peer of the above (dev) |
+| @testing-library/jest-dom | 7.0.1 | MIT | 1 | DOM matchers (dev) |
+| @testing-library/user-event | 14.6.10 | MIT | 1 | User interaction in tests (dev) |
 | eslint | 10.14.0 | MIT | 1 | Lint (dev) |
+| @eslint/js | 10.0.1 | MIT | 1 | ESLint recommended rules (dev) |
+| typescript-eslint | 8.72.2 | MIT | 1 | TypeScript lint rules (dev) |
+| eslint-plugin-react-hooks | 7.1.1 | MIT | 1 | Hooks rules (dev) |
+| eslint-plugin-react-refresh | 0.5.7 | MIT | 1 | Fast-refresh rules (dev) |
+| globals | 17.14.0 | MIT | 1 | Browser globals for ESLint (dev) |
 | prettier | 3.10.1 | MIT | 1 | Format (dev) |
+| @types/react, @types/react-dom | 19.3.0 | MIT | 1 | Types (dev) |
+| @types/node | 24.19.2 | MIT | 1 | Types for config files (dev) |
+| react-hook-form | 7.92.0 | MIT | 2 | Forms |
+| zod | 4.6.7 | MIT | 2 | Schemas |
+| @hookform/resolvers | 7.0.6 | MIT | 2 | zod with react-hook-form (approval needed when added) |
 | @zxing/browser | 0.2.1 | MIT | 4 | Aadhaar QR scanning (behind a flag) |
 | @playwright/test | 1.65.0 | Apache-2.0 | 8 | End-to-end tests (dev) |
 
-Supporting packages that the approved tools need (for example `@vitejs/plugin-react`, `typescript-eslint`, `@types/react`) are added here once approved in the Week 1 plan.
+### npm override
+
+`package.json` overrides **minimatch to 11.0.8** (MIT). ESLint 10.14 and typescript-eslint 8.72.2 require `minimatch` ^10, and every 10.x release is affected by GHSA-g3hv-75wg-m249 (moderate ReDoS, fixed in 11.0.1). The override applies to dev tooling only; production dependencies had no findings. ESLint was checked to still run and to still report errors with the override in place. Remove the override once ESLint and typescript-eslint depend on a fixed `minimatch`.
 
 ## Free tools outside the lock files
 
-PostgreSQL 17, Caddy, `age`, `rclone` (Week 8, on the server). `pip-audit` and `npm audit` read public vulnerability databases at no cost.
+PostgreSQL 17, Caddy, `age` and `rclone` (Week 8, on the server). `pip-audit` and `npm audit` read public vulnerability databases at no cost.

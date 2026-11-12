@@ -64,7 +64,9 @@ docs/        requirements, rules, data model, milestones
   6. Summarise what was built, how to try it, what is left, and any decision you need.
 - Business logic lives in `service.py`, never in routers or the UI.
 - Every write endpoint has a permission check, validation, one database transaction and an audit entry.
-- Every schema change is an Alembic migration. Never edit a migration that has already been applied.
+- Every schema change is an Alembic migration. Never edit a migration that has already been applied. An insert-only table gets `make_insert_only_sql()` in its migration and an entry in `INSERT_ONLY_TABLES` (see `docs/data-model.md`).
+- Audit entries are written with `write_audit()` in the same transaction as the change; never commit them separately.
+- Register every new models module in `backend/app/models.py`.
 - Fix the cause when a test fails. Never weaken, skip or delete a test to make it pass.
 - Ask before deleting files, changing a business rule, adding a dependency that is not listed above, or changing the plan.
 - Commit in small steps once the checks pass, with clear messages.
@@ -72,16 +74,21 @@ docs/        requirements, rules, data model, milestones
 ## Commands (PowerShell; Week 1 creates them, so keep this list accurate)
 
 ```powershell
-.\scripts\dev.ps1        # start backend (uvicorn --reload) and frontend (vite)
-.\scripts\check.ps1      # ruff, mypy, pytest, pip-audit, eslint, tsc, vitest, npm audit
+.\scripts\setup.ps1      # one-time from a fresh clone: .venv (3.12), packages, db-setup, migrations
+.\scripts\db-setup.ps1   # roles app_owner/app_user, databases arms_dev/arms_test, backend\.env (never prints passwords)
+.\scripts\dev.ps1        # migrations, then API (uvicorn --reload, :8000, own window) and Vite (:5173, proxies /api)
+.\scripts\check.ps1      # the gate: ruff, mypy, pytest, pip-audit, eslint, tsc, vitest, npm audit
 .\scripts\seed.ps1       # load fake demo data into the dev database (refuses APP_ENV=production)
-cd backend; alembic upgrade head
+cd backend; ..\.venv\Scripts\alembic upgrade head
 ```
+
+From Claude Code's shell, run a script as `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check.ps1`.
+The venv lives at the repo root (`.venv`). Tests rebuild the `arms_test` schema on every run.
 
 ## Time and money
 
 - Business time zone: `Asia/Kolkata`. Store timestamps as `timestamptz` in UTC. Rent dates are local calendar dates.
-- Money is integer paise everywhere. ₹300 is `30000`. Show rupees with Indian digit grouping (₹1,20,000).
+- Money is integer paise everywhere. ₹300 is `30000`. Show rupees with Indian digit grouping (₹1,20,000); whole amounts show no `.00`, and paise appear only when non-zero (₹1,20,000.50). Right-align money in tables. Excel exports keep real numbers with a 2-decimal rupee format.
 
 ## Reference docs (read the ones a milestone lists)
 

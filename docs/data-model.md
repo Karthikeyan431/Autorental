@@ -118,3 +118,9 @@ REVOKE UPDATE, DELETE, TRUNCATE ON audit_logs FROM app_user;
 ```
 
 Use two database roles: `app_owner`, which owns the schema and runs migrations, and `app_user`, which the app uses at runtime with only the grants it needs.
+
+## Grants and insert-only tables (rule for every migration)
+
+- Migration `0001` runs `ALTER DEFAULT PRIVILEGES` as `app_owner`, so every table `app_owner` creates later automatically gives `app_user` SELECT, INSERT, UPDATE and DELETE (never TRUNCATE), and every sequence USAGE and SELECT. A test creates a probe table and checks this.
+- **Insert-only tables** are `audit_logs`, `settings_versions`, `rent_charges`, `kyc_events`, `escalation_events` and `document_access_log`. They are listed in `backend/app/core/db_grants.py` (`INSERT_ONLY_TABLES`). The migration that creates one must run `make_insert_only_sql("<table>")`, which revokes UPDATE, DELETE and TRUNCATE from `app_user`, right after creating it. A test checks every listed table as soon as it exists and fails if `app_user` can change or remove rows.
+- **Audit entries are written in the same database transaction as the change they record** (`write_audit()` uses the caller's session and never commits). A rolled-back change leaves no audit entry; a test proves it.

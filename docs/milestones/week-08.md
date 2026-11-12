@@ -12,7 +12,7 @@
 - **Staff performance** (owner): drivers managed, overdue amount, escalations open and closed, average days to clear.
 
 **Reports and audit**
-- All report keys in `api.md`, each with filters and Excel export (openpyxl, rupee formatting, frozen header, totals row).
+- All report keys in `api.md`, each with filters and Excel export (openpyxl, frozen header, totals row). Money cells hold real numbers (rupees) with a 2-decimal rupee number format, never text (D14).
 - Collection reports by date received **and** by rent day (Q19).
 - Staff see only their own drivers' figures unless granted `reports.all` (N1).
 - **Audit log viewer** (owner): filters and a "Verify chain" button.

@@ -1,0 +1,12 @@
+# PLACEHOLDER (Week 8). Nightly pg_dump + documents, encrypted with age, copied with rclone
+# to Oracle Object Storage (Always Free), keeping 14. The script is written in Week 8.
+[Unit]
+Description=ARMS nightly encrypted backup
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=arms
+Group=arms
+EnvironmentFile=/etc/arms/arms.env
+ExecStart=/srv/arms/app/deploy/backup.sh
