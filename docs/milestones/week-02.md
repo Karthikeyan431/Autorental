@@ -26,6 +26,8 @@
 - A route permission registry, plus a test that fails if any route has no declared permission.
 - Audit entries for logins (success and failure), user changes, permission changes and settings changes.
 - A first-run command to create the owner account (prompted in the terminal; no default password in code).
+- **Seed:** add a fake owner and 2 fake staff to the seed, with a dev-only password read from the `SEED_DEV_PASSWORD` environment variable (documented in `.env.example`, never committed with a value). The seed refuses to run when `APP_ENV=production`.
+- Permission codes include `drivers.restrict` (suspend, reactivate and restrictions; off for staff by default, grantable), `adjustments.request` (staff on by default) and `adjustments.decide` (owner only, never grantable).
 
 **Frontend**
 - Sign-in, the owner TOTP step, forced password change, and session refresh handling.

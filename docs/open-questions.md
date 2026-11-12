@@ -13,7 +13,7 @@ Build the default until the client answers. Make the default a setting or a flag
 | N12 | Which ID documents besides masked Aadhaar, and which licence classes qualify? (old Q21, Q22) | Masked Aadhaar only; staff judge the class with the checklist; the transport validity date is used if present | Setting `accepted_id_types`, `permitted_licence_classes` | Week 3 | |
 | N14 | Do most drivers have an Aadhaar card, e-Aadhaar or mAadhaar with the Secure QR? | Manual review for those who do not | All methods available | Week 3 | |
 | N13 | Must the business register with UIDAI as an offline verification entity to scan Aadhaar QR? (legal adviser) | Staff use UIDAI's free app and attest; in-app scanning off | Flag `AADHAAR_QR_INAPP_ENABLED=false` | Week 4 | |
-| N3 | Daily payments, or weekly for some drivers? (weekly above ₹2,000 to a merchant UPI ID carries 0.4%) | Per driver; daily by default; warning above ₹2,000 | `drivers.payment_rhythm`, `weekly_mdr_warning_paise` | Week 5 | |
+| N3 | Daily payments, or weekly for some drivers? (weekly above ₹2,000 to a merchant UPI ID carries 0.4%) | Per driver; daily by default; warning above ₹2,000. **Weekly = paying in arrears** for days already charged (Q16 stays); a weekly driver's charges are due on the first `weekly_pay_day` on or after the rent date, at the rent due time, so they are not overdue mid-week. *Agency default 12 Nov 2026; awaiting client confirmation.* | `drivers.payment_rhythm`, `weekly_pay_day`, `weekly_mdr_warning_paise`; `due_at` per charge | Week 5 | |
 | N4 | At what time are each day's pay requests sent? | 08:00, before the due time | `pay_request_time` | Week 5 | |
 | N5 | Which UPI ID receives rent? | The business bank's merchant UPI ID | `business_upi_id`, `upi_payee_name` | Week 5 | |
 | N6 | Which payment methods are allowed? | UPI to the business and cash at the office | `payments.method` values | Week 6 | |
@@ -52,6 +52,6 @@ Settled or dropped: Q6 (staff register drivers), Q7 (no SMS; WhatsApp links), Q8
 
 ## Things to check early (record results here)
 
-- Week 1: Python, Node, PostgreSQL versions on the development PC.
+- Week 1: Python, Node, PostgreSQL versions on the development PC. Result (12 Nov 2026): Git 2.53.0, Python 3.12.10 (3.14.3 is the `py` default, not used), Node 24.15.0 (kept by decision) with npm 11.12.1, PostgreSQL 17.9 with the `postgresql-x64-17` service running, Claude Code 2.1.322, winget 1.29.380.
 - Week 6: does the UPI link open with the client's merchant UPI ID in the 3 most-used UPI apps? Result:
 - Week 7: a real statement export format from the client's bank (column names, date format). Use a **made-up sample file** in the same format for tests.

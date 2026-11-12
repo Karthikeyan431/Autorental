@@ -54,7 +54,7 @@ The driver can also show the licence in their own DigiLocker or mParivahan app a
 
 ## Statuses (per check, per attempt)
 
-`draft → submitted → under_review → approved | rejected | resubmission_required`. An approved licence becomes `expired` (by a job) when its validity date passes. Only the owner can reopen an approved or rejected check, which creates a new attempt.
+`draft → submitted → under_review → approved | rejected | resubmission_required`. An approved licence becomes `expired` (by a job) when its validity date passes. Only the owner can reopen an approved or rejected check. A reopen creates a new attempt with status `under_review`; the previous attempt stays in history with its status unchanged, and is no longer current.
 
 ## Eligibility (rule 10): the single function used by agreement activation
 

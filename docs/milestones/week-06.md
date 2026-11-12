@@ -22,7 +22,7 @@
 - **Confirm days:** pre-filled from the open pay request (oldest unpaid first). It needs an explicit Confirm (rule 4) and uses the allocation transaction from §6, checking pending allocations too.
 - **Owner approval queue:**
   - approve one or many: per payment, lock it, re-check that it fits, set approved, issue the receipt number, write the audit entry;
-  - reject with a reason, which returns a linked pay request to `open`.
+  - reject with a reason, which marks its allocations reversed ("payment rejected", never deleted) and returns a linked pay request to `open`.
   - Payments that no longer fit are refused one by one with a reason; the rest are approved.
 - **Receipts:** a `receipt_counters` row lock per financial year (`RCPT/2026-27/000123`) and a PDF with the days covered. Downloadable for WhatsApp sharing.
 - **Reversals:** staff request, owner decides; allocations are reversed, and the receipt is marked cancelled (Q4).
@@ -47,13 +47,13 @@ Bank statement import and matching (Week 7), escalations (Week 7).
 - **UPI link:** URL-encodes the payee name and note; the amount has 2 decimals from paise without floats (30000 gives `300.00`).
 - **WhatsApp URL:** encodes the message; mobile in `91XXXXXXXXXX` form.
 - **Payments:**
-  - a duplicate UPI reference is refused;
+  - a duplicate UPI reference is refused; after the first payment is rejected or reversed, the same reference can be recorded again;
   - a double submit with the same `idempotency_key` creates one payment.
 - **Rule 4:** creating a payment creates **no** allocation until Confirm; allocating to another driver's day, a future day, beyond a day's balance or beyond the unallocated amount is refused.
 - **Rule 13:**
   - an unapproved payment never reduces outstanding or overdue;
   - after approval it does;
-  - a rejected one never does;
+  - a rejected one never does, and its allocations are marked reversed with "payment rejected", not deleted;
   - the receipt number is issued at approval and only then.
 - **Receipts:** approving 50 payments at once gives 50 unique receipt numbers with no gaps.
 - **Concurrency:** two approvals that together over-fill the same day; one succeeds and the other is refused with a reason.

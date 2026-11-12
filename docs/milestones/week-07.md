@@ -12,7 +12,8 @@
 - **Parse:** credits only; amounts parsed with `Decimal` from text into paise; line fingerprints; already-imported lines skipped.
 - **Matching:** strong, probable and unmatched, exactly as in §4. A match shows why it matched.
 - **Review screen:**
-  - **Confirm all strong** creates payments (source `pay_request`, the pay request's suggested days confirmed by the clicking user), which go straight into the owner approval queue.
+  - **Confirm all strong** creates payments (source `pay_request`, with suggested days **recomputed at confirm time** from the driver's oldest unpaid days and confirmed by the clicking user), which go straight into the owner approval queue.
+- Strong matching also checks requests superseded in the last 7 days (`rent-and-payments.md` §4).
   - Probable lines one by one.
   - Unmatched lines: link to a driver manually, or ignore with a reason.
 - Never auto-approve (N7).

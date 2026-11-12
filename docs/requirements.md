@@ -47,7 +47,7 @@ Owner-only actions cannot be granted to staff. "Grantable" means the owner can s
 | Verify identity and licence; approve, reject or ask again (N2) | Yes | Yes | n/a |
 | Reopen or overturn a verification | Yes | No | Never |
 | Change which staff member manages a driver | Yes | No | Never |
-| Place or lift a blocking restriction; suspend or reactivate a driver | Yes | No | Yes |
+| Place or lift a blocking restriction; suspend or reactivate a driver (`drivers.restrict`) | Yes | No | Yes |
 | Register autos, papers and maintenance | Yes | Yes | n/a |
 | Create an agreement draft; print it | Yes | Yes | n/a |
 | Activate or end an agreement (eligibility checked by the system) | Yes | Yes | n/a |
@@ -55,8 +55,8 @@ Owner-only actions cannot be granted to staff. "Grantable" means the owner can s
 | Record a payment with proof; choose or confirm the days it covers | Yes | Yes | n/a |
 | Upload a bank statement; confirm matches | Yes | No | Yes |
 | Approve or reject a payment | Yes | No | Never |
-| Request a reversal or a charge adjustment | Yes | Yes | n/a |
-| Decide a reversal or adjustment; approve advance use or refunds | Yes | No | Never |
+| Request a reversal or a charge adjustment (`adjustments.request`) | Yes | Yes | n/a |
+| Decide a reversal or adjustment (`adjustments.decide`); approve advance use or refunds | Yes | No | Never |
 | Raise or close an escalation | Yes | No | Never |
 | Work an escalation (log calls, visits, promises) | Yes | Their drivers | n/a |
 | See drivers | All | All; edit only drivers they manage (N1) | n/a |

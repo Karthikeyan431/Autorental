@@ -4,7 +4,8 @@ Conventions:
 - Primary keys are `BIGINT GENERATED ALWAYS AS IDENTITY`. Use a public-facing `code` where people need one (driver code, agreement number, receipt number).
 - Money is `BIGINT` paise with `CHECK (... >= 0)` or `> 0` as appropriate.
 - Timestamps are `timestamptz` (UTC); rent dates are `date` (Asia/Kolkata calendar).
-- `created_at` and `updated_at` on every table. Status columns are `text` with `CHECK (status IN (...))`.
+- `created_at` on every table, and `updated_at` on every table that can be updated. Insert-only tables (`audit_logs`, `settings_versions`, `rent_charges`, `kyc_events`, `escalation_events`, `document_access_log`) have no `updated_at`. Status columns are `text` with `CHECK (status IN (...))`.
+- The KYC method `demo` exists only for `APP_ENV` `development` and `test` (see `kyc.md` and Week 4); it is not one of the rule 8 methods.
 - Personal fields marked *(enc)* are encrypted at application level (AES-256-GCM, key from env, `key_id` stored).
 - Outstanding, overdue and balances are **never stored**; they are computed from charges, adjustments, allocations and payment status.
 
@@ -16,7 +17,7 @@ Conventions:
 | user_permissions | user_id, permission_code, granted_by, granted_at | Owner-only codes cannot be granted (service check plus a CHECK list) |
 | sessions | user_id, refresh_token_hash, family_id, expires_at, revoked_at, ip, user_agent | Refresh rotation; reuse of an old token revokes the family |
 | audit_logs | occurred_at, actor_id, action, entity_type, entity_id, before, after (redacted JSON), reason, ip, request_id, prev_hash, hash | Insert-only. The app DB role gets INSERT and SELECT only. Hash chain over the canonical JSON of each row |
-| settings_versions | effective_from, rent_due_time, due_day_offset (Q9, default 0), licence_alert_days (30), vehicle_alert_days (30), permitted_licence_classes, advance_adjustments_enabled, refunds_enabled (false), staff_limit (10), business_name, business_address, business_upi_id, upi_payee_name, whatsapp_template, pay_request_time (08:00), weekly_pay_day (Monday), escalation_suggest_after_days (1), weekly_mdr_warning_paise (200000), created_by | Never updated; each change inserts a version. "Current" = latest effective_from ≤ now |
+| settings_versions | effective_from, rent_due_time, due_day_offset (Q9, default 0), licence_alert_days (30), vehicle_alert_days (30), permitted_licence_classes, advance_adjustments_enabled, refunds_enabled (false), staff_limit (10), business_name, business_address, business_upi_id, upi_payee_name, whatsapp_template, pay_request_time (08:00), weekly_pay_day (ISO weekday 1–7, default 1 = Monday), escalation_suggest_after_days (1), weekly_mdr_warning_paise (200000), created_by | Never updated; each change inserts a version. "Current" = latest effective_from ≤ now |
 | notifications | user_id, kind, entity_type, entity_id, message, created_at, read_at | In-app alerts |
 | push_subscriptions | user_id, endpoint (unique), p256dh, auth, created_at, revoked_at | Web Push |
 
@@ -39,7 +40,7 @@ Conventions:
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| vehicles | registration_number (unique, normalised), make, model, year, fuel_type, status (`available` / `rented` / `maintenance` / `inactive`), notes | Only the agreements service sets `rented` and back |
+| vehicles | registration_number (unique, normalised), make, model, year, fuel_type, status (`available` / `rented` / `maintenance` / `inactive`), notes | Only the agreements service sets `rented` and back. Ending an agreement sets `available` at once; the `[]` exclusion constraint and the eligibility check stop a new agreement starting on the return day (Q1), and the UI shows "available from <return day + 1>" |
 | vehicle_compliance | vehicle_id, kind (`insurance` / `fitness` / `permit` / `pollution`, Q29), number, valid_from, valid_until, document_id | Expiry alerts |
 | maintenance_records | vehicle_id, started_on, ended_on, description, cost_paise, recorded_by | |
 
@@ -48,7 +49,7 @@ Conventions:
 | Table | Key columns | Notes |
 | --- | --- | --- |
 | agreements | agreement_no (unique), driver_id, vehicle_id, status (`draft` / `active` / `ended` / `cancelled`), start_date, end_date, daily_rent_paise (> 0), advance_required_paise, terms_version, signed_document_id, created_by, activated_by, activated_at, ended_by, ended_at, end_reason | Rate fixed per agreement (Q10) |
-| rent_charges | agreement_id, driver_id, rent_date, amount_paise, due_at, settings_version_id, created_at | Never updated. `UNIQUE (agreement_id, rent_date)` |
+| rent_charges | agreement_id, driver_id, rent_date, amount_paise, due_at, settings_version_id, created_at | Never updated. `UNIQUE (agreement_id, rent_date)`. `due_at` follows the driver's payment rhythm at accrual time (see `rent-and-payments.md` §1) |
 | charge_adjustments | rent_charge_id, amount_paise (signed; negative = waiver), reason, status (`pending` / `approved` / `rejected`), requested_by, decided_by, decided_at | Only approved adjustments count |
 
 ## Pay requests, payments, statements
@@ -56,8 +57,8 @@ Conventions:
 | Table | Key columns | Notes |
 | --- | --- | --- |
 | pay_requests | driver_id, agreement_id, period_start, period_end, amount_paise, reference_code (e.g. `R00421112`; unique with period_start), suggested_charge_ids (bigint[]), status (`open` / `paid` / `superseded` / `cancelled`), created_at, sent_by, sent_at, send_count | One open request per driver per period (unique on driver_id, period_start where status = 'open') |
-| payments | driver_id, agreement_id, amount_paise (> 0), method (`upi` / `cash`), source (`pay_request` / `upi_direct` / `cash_office`), purpose (`rent` / `advance_deposit`), reference (UPI ref / UTR), received_on, pay_request_id, statement_line_id (unique, nullable), proof_document_id, recorded_by, status (`awaiting_approval` / `approved` / `rejected` / `reversed`), approved_by, approved_at, rejection_reason, receipt_no (unique, set at approval), idempotency_key (unique) | Unique (method, reference) where reference is not null and status <> 'reversed' |
-| payment_allocations | payment_id or advance_transaction_id (exactly one), rent_charge_id, amount_paise (> 0), confirmed_by, confirmed_at, reversed_at, reversed_by, reversal_reason | Counts toward balances only when the payment is approved (or the advance transaction is approved) and the allocation is not reversed |
+| payments | driver_id, agreement_id, amount_paise (> 0), method (`upi` / `cash`), source (`pay_request` / `upi_direct` / `cash_office`), purpose (`rent` / `advance_deposit`), reference (UPI ref / UTR), received_on, pay_request_id, statement_line_id (unique, nullable), proof_document_id, recorded_by, status (`awaiting_approval` / `approved` / `rejected` / `reversed`), approved_by, approved_at, rejection_reason, receipt_no (unique, set at approval), idempotency_key (unique) | Unique (method, reference) where reference is not null and status is not `rejected` or `reversed` |
+| payment_allocations | payment_id or advance_transaction_id (exactly one), rent_charge_id, amount_paise (> 0), confirmed_by, confirmed_at, reversed_at, reversed_by, reversal_reason | Counts toward balances only when the payment is approved (or the advance transaction is approved) and the allocation is not reversed. Never deleted: rejecting a payment marks its allocations reversed with the reason "payment rejected" |
 | reversal_requests | payment_id or allocation_id, reason, requested_by, decided_by, decision, decided_at | Q4 default: staff request, owner decides |
 | receipt_counters | financial_year (e.g. `2026-27`), last_number | Row-locked when issuing, so there are no gaps: `RCPT/2026-27/000123` |
 | bank_statement_imports | file_document_id, file_sha256 (unique), bank_profile_id, period_from, period_to, uploaded_by, uploaded_at, line_count | A duplicate file upload is refused |
@@ -101,11 +102,12 @@ ALTER TABLE payment_allocations ADD CONSTRAINT alloc_positive   CHECK (amount_pa
 ALTER TABLE payment_allocations ADD CONSTRAINT one_source
   CHECK ((payment_id IS NULL) <> (advance_transaction_id IS NULL));
 
--- The same UPI reference cannot be recorded twice; a statement line backs one payment
+-- The same UPI reference cannot be recorded twice; a statement line backs one payment.
+-- Rejected and reversed payments release their reference and statement line, so they can be re-recorded correctly.
 CREATE UNIQUE INDEX unique_payment_reference ON payments (method, reference)
-  WHERE reference IS NOT NULL AND status <> 'reversed';
+  WHERE reference IS NOT NULL AND status NOT IN ('rejected', 'reversed');
 CREATE UNIQUE INDEX one_payment_per_statement_line ON payments (statement_line_id)
-  WHERE statement_line_id IS NOT NULL AND status <> 'reversed';
+  WHERE statement_line_id IS NOT NULL AND status NOT IN ('rejected', 'reversed');
 
 -- Rule 15: one open escalation per driver
 CREATE UNIQUE INDEX one_open_escalation_per_driver ON escalations (driver_id)
@@ -116,3 +118,9 @@ REVOKE UPDATE, DELETE, TRUNCATE ON audit_logs FROM app_user;
 ```
 
 Use two database roles: `app_owner`, which owns the schema and runs migrations, and `app_user`, which the app uses at runtime with only the grants it needs.
+
+## Grants and insert-only tables (rule for every migration)
+
+- Migration `0001` runs `ALTER DEFAULT PRIVILEGES` as `app_owner`, so every table `app_owner` creates later automatically gives `app_user` SELECT, INSERT, UPDATE and DELETE (never TRUNCATE), and every sequence USAGE and SELECT. A test creates a probe table and checks this.
+- **Insert-only tables** are `audit_logs`, `settings_versions`, `rent_charges`, `kyc_events`, `escalation_events` and `document_access_log`. They are listed in `backend/app/core/db_grants.py` (`INSERT_ONLY_TABLES`). The migration that creates one must run `make_insert_only_sql("<table>")`, which revokes UPDATE, DELETE and TRUNCATE from `app_user`, right after creating it. A test checks every listed table as soon as it exists and fails if `app_user` can change or remove rows.
+- **Audit entries are written in the same database transaction as the change they record** (`write_audit()` uses the caller's session and never commits). A rolled-back change leaves no audit entry; a test proves it.

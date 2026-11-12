@@ -1,0 +1,11 @@
+# PLACEHOLDER (Week 8). Every 15 minutes, and soon after boot (catches up missed days).
+[Unit]
+Description=Run ARMS jobs every 15 minutes
+
+[Timer]
+OnBootSec=2min
+OnCalendar=*:0/15
+Persistent=true
+
+[Install]
+WantedBy=timers.target

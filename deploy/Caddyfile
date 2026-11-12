@@ -1,0 +1,27 @@
+# PLACEHOLDER (Week 8). Replace arms.example.invalid with the free subdomain.
+# Caddy obtains and renews the Let's Encrypt certificate automatically.
+
+arms.example.invalid {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		Permissions-Policy "camera=(self), microphone=(), geolocation=()"
+		-Server
+	}
+
+	# API: proxied to uvicorn on localhost only.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	# Frontend: the built app; unknown paths fall back to index.html (client-side routes).
+	handle {
+		root * /srv/arms/frontend-dist
+		try_files {path} /index.html
+		file_server
+	}
+}

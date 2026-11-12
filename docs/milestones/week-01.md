@@ -7,7 +7,7 @@
 ## Step 0: discovery (report, then wait for approval)
 
 1. Inspect the folder. It should contain only this kit. List anything unexpected; do not overwrite anything.
-2. Check the versions of Git, Python (`py --version`), Node and npm, and PostgreSQL (`psql --version`), and check whether a PostgreSQL service is running. Report what is missing, with exact Windows install steps for free tools only.
+2. Check the versions of Git, Python (`py -3.12 --version`; the project venv uses 3.12, not the `py` default), Node and npm, and PostgreSQL (`psql --version`), and check whether a PostgreSQL service is running. Report what is missing, with exact Windows install steps for free tools only.
 3. Propose:
    - the folder structure;
    - exact library versions (current stable);
@@ -32,7 +32,7 @@
   - **Request id** middleware and structured JSON logging that redacts personal fields.
   - **Audit writer:** canonical JSON and hash chain, plus `verify_chain()`.
 - `GET /api/v1/health` (DB check and version).
-- Seed command with obviously fake data: 1 owner, 2 staff, 5 drivers, 5 autos (no real-looking identity numbers).
+- Seed command that inserts only the first `settings_versions` row (obviously fake business details), and refuses to run when `APP_ENV=production`. Week 2 adds the owner and 2 staff, Week 3 drivers, and Week 4 autos.
 
 **Frontend**
 - Vite, React and TypeScript with Tailwind, React Router, TanStack Query, an API client with the error envelope and request id, an app shell (sidebar, top bar, responsive), and empty pages for each module in `requirements.md` §4.
@@ -43,6 +43,8 @@
 - `scripts\check.ps1`: ruff, mypy, pytest, eslint, tsc, vitest, pip-audit and npm audit. It fails on any error.
 - `scripts\seed.ps1`.
 - `README.md`: Windows setup from zero, using the commands above.
+- `.gitattributes` pinning line endings.
+- `docs/dependencies.md`: every package with its pinned version and licence (all free and open source).
 - Optional: a GitHub Actions workflow running the same checks (free).
 - `deploy/` placeholders: `Caddyfile`, systemd unit templates and `deploy/README.md` from `docs/deployment.md` (no server work yet).
 
@@ -64,7 +66,7 @@ Logins, drivers and every business feature.
 - [ ] `.\scripts\check.ps1` is green.
 - [ ] `alembic upgrade head` works on an empty database, and `alembic downgrade base` works too.
 - [ ] `.env.example` lists every setting; no secrets are committed.
-- [ ] Seed data loads and is visibly fake.
+- [ ] Seed data (the first settings version) loads and is visibly fake; the seed refuses `APP_ENV=production`.
 
 ## You check
 

@@ -1,0 +1,23 @@
+# PLACEHOLDER (Week 8). Install to /etc/systemd/system/arms-api.service
+[Unit]
+Description=ARMS API (uvicorn)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=arms
+Group=arms
+WorkingDirectory=/srv/arms/app/backend
+EnvironmentFile=/etc/arms/arms.env
+# --no-access-log: the app logs requests itself without IPs or query strings.
+ExecStart=/srv/arms/venv/bin/uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 --workers 2 --no-access-log --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/arms/data
+
+[Install]
+WantedBy=multi-user.target

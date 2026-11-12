@@ -29,9 +29,9 @@ A responsive web app used only by the **owner** and up to **10 staff**. Drivers 
 
 ## Stack
 
-- **Backend:** Python 3.12 (create the venv with `py -3.12 -m venv .venv`; this laptop also has Python 3.14 as the `py` default, which we do not use), FastAPI, Pydantic v2, SQLAlchemy 2.0, Alembic, PostgreSQL 17. Libraries: argon2-cffi, PyJWT, pyotp, cryptography, Pillow, openpyxl, reportlab, qrcode, pywebpush. Tests: pytest. Lint and types: ruff, mypy.
-- **Frontend:** React and TypeScript with Vite, Tailwind CSS, React Router, TanStack Query, react-hook-form with zod, and @zxing/browser for QR scanning. Tests: Vitest and Testing Library. Playwright for a few end-to-end flows in Week 8.
-- **Versions:** use current stable releases of each, and pin them (lock files committed).
+- **Backend:** Python 3.12 (create the venv with `py -3.12 -m venv .venv`; this laptop also has Python 3.14 as the `py` default, which we do not use), FastAPI, Pydantic v2, pydantic-settings, SQLAlchemy 2.0, Alembic, psycopg 3 (binary), uvicorn, PostgreSQL 17. Libraries: argon2-cffi, PyJWT, pyotp, cryptography, Pillow, openpyxl, reportlab, qrcode, pywebpush, python-multipart, APScheduler (development scheduling only; production uses the systemd timer). Tests: pytest, httpx. Lint, types and audit: ruff, mypy, pip-audit.
+- **Frontend:** React and TypeScript with Vite, Tailwind CSS, React Router, TanStack Query, react-hook-form with zod, and @zxing/browser for QR scanning. Tests: Vitest and Testing Library. Lint and format: ESLint, Prettier. Playwright for a few end-to-end flows in Week 8.
+- **Versions:** use current stable releases of each, and pin them (lock files committed). Every dependency must be free and open source. `docs/dependencies.md` lists each package with its version and licence; update it whenever a dependency is added or upgraded.
 - **Development:** Windows with PowerShell. Tests run against a real PostgreSQL test database, never SQLite, because the constraints matter.
 - **Production:** Ubuntu on Oracle Cloud Always Free (Arm64), Caddy for HTTPS (Let's Encrypt), systemd services, and a free subdomain. See `docs/deployment.md`.
 
@@ -64,7 +64,9 @@ docs/        requirements, rules, data model, milestones
   6. Summarise what was built, how to try it, what is left, and any decision you need.
 - Business logic lives in `service.py`, never in routers or the UI.
 - Every write endpoint has a permission check, validation, one database transaction and an audit entry.
-- Every schema change is an Alembic migration. Never edit a migration that has already been applied.
+- Every schema change is an Alembic migration. Never edit a migration that has already been applied. An insert-only table gets `make_insert_only_sql()` in its migration and an entry in `INSERT_ONLY_TABLES` (see `docs/data-model.md`).
+- Audit entries are written with `write_audit()` in the same transaction as the change; never commit them separately.
+- Register every new models module in `backend/app/models.py`.
 - Fix the cause when a test fails. Never weaken, skip or delete a test to make it pass.
 - Ask before deleting files, changing a business rule, adding a dependency that is not listed above, or changing the plan.
 - Commit in small steps once the checks pass, with clear messages.
@@ -72,16 +74,23 @@ docs/        requirements, rules, data model, milestones
 ## Commands (PowerShell; Week 1 creates them, so keep this list accurate)
 
 ```powershell
-.\scripts\dev.ps1        # start backend (uvicorn --reload) and frontend (vite)
-.\scripts\check.ps1      # ruff, mypy, pytest, eslint, tsc, vitest
-.\scripts\seed.ps1       # load fake demo data into the dev database
-cd backend; alembic upgrade head
+.\scripts\setup.ps1      # one-time from a fresh clone: .venv (3.12), packages, db-setup, migrations
+.\scripts\db-setup.ps1   # roles, databases, backend\.env; never changes an existing role's password (-RotatePasswords to rotate, -DryRun to preview)
+.\scripts\dev.ps1        # migrations, then API (uvicorn --reload, :8000, own window) and Vite (:5173, proxies /api)
+.\scripts\check.ps1      # the gate: ruff, mypy, pytest, pip-audit, eslint, tsc, vitest, npm audit
+.\scripts\seed.ps1       # load fake demo data into the dev database (refuses APP_ENV=production)
+cd backend; ..\.venv\Scripts\alembic upgrade head
 ```
+
+From Claude Code's shell, run a script as `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check.ps1`.
+The venv lives at the repo root (`.venv`). Tests rebuild the `arms_test` schema on every run.
 
 ## Time and money
 
 - Business time zone: `Asia/Kolkata`. Store timestamps as `timestamptz` in UTC. Rent dates are local calendar dates.
-- Money is integer paise everywhere. ₹300 is `30000`. Show rupees with Indian digit grouping (₹1,20,000).
+- Weekdays are ISO everywhere: 1 = Monday ... 7 = Sunday (`weekly_pay_day`, API, UI). Python: `iso_weekday()` / `date.isoweekday()`, never `date.weekday()`. Frontend: `isoWeekday()` from `src/lib/weekday.ts`; `getDay()`/`getUTCDay()` are banned by ESLint (Sunday = 0).
+- The rent due time has no default. From Week 5, agreement activation and accrual refuse with `RENT_DUE_TIME_NOT_SET` ("Set the rent due time in Settings") until it is set.
+- Money is integer paise everywhere. ₹300 is `30000`. Show rupees with Indian digit grouping (₹1,20,000); whole amounts show no `.00`, and paise appear only when non-zero (₹1,20,000.50). Right-align money in tables. Excel exports keep real numbers with a 2-decimal rupee format.
 
 ## Reference docs (read the ones a milestone lists)
 
@@ -94,6 +103,8 @@ cd backend; alembic upgrade head
 - `docs/security.md`: authentication, permissions, files, audit, backups
 - `docs/open-questions.md`: open client questions and the defaults to build
 - `docs/deployment.md`: free hosting on Oracle Cloud
+- `docs/dependencies.md`: every package, its pinned version and licence
+- `docs/decisions.md`: decisions made with the agency lead, with dates
 - `docs/milestones/week-01.md` to `week-08.md`
 
 ## Glossary
