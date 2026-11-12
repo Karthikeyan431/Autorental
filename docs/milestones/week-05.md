@@ -16,6 +16,7 @@
   4. Set the agreement `active` and the vehicle `rented`.
   5. Write the audit entry.
   Refuse with all the reason codes.
+- **Rent due time must be set (D20).** The rent due time has no default. While no current settings version sets it, refuse to activate an agreement and refuse to run accrual, with code `RENT_DUE_TIME_NOT_SET` and the message "Set the rent due time in Settings". The accrual job exits non-zero with the same message.
 - **End:** set the end date (the return day is charged in full, Q2). The vehicle is set to `available` at once; the `[]` exclusion constraint and the eligibility check stop a new agreement starting on the return day (Q1), and the UI shows "available from <return day + 1>".
 - All constraints from `data-model.md`: partial unique indexes and exclusion constraints.
 - Printable agreement PDF (reportlab) from a **placeholder template** with business details, driver, auto, rate and dates. We write no legal terms (Q13). Upload of the signed copy.
@@ -50,6 +51,8 @@ Recording payments, pay requests and approvals (Week 6). Until then, allocations
 - Two staff activating the same vehicle for different drivers at the same moment: exactly one succeeds (concurrency test with two connections).
 - The worked example in `rent-and-payments.md` §1 reproduces exactly (balances ₹0, ₹0, ₹200, ₹300; ₹500 overdue at 18:00 on 5 November).
 - An approved adjustment of −₹300 waives a day; a pending one changes nothing.
+- With no rent due time set: activation is refused with `RENT_DUE_TIME_NOT_SET` ("Set the rent due time in Settings"), accrual creates no charges and exits non-zero, and nothing is written. After the owner sets it, both work.
+- Weekly due dates use ISO weekdays (`iso_weekday()`, 1 = Monday ... 7 = Sunday): a `weekly_pay_day` of 7 makes charges due on Sunday, never Monday.
 - A weekly driver's mid-week charges are not overdue before the weekly pay day and are overdue after its due time; switching a driver's rhythm leaves existing charges' `due_at` unchanged.
 - After an agreement ends, a new agreement for the same auto starting on the return day is refused; one starting the next day is allowed.
 

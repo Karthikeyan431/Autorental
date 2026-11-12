@@ -10,6 +10,16 @@ from zoneinfo import ZoneInfo
 # Loaded from the IANA database (the `tzdata` package on Windows). Never a fixed offset.
 BUSINESS_TZ = ZoneInfo("Asia/Kolkata")
 
+# Weekdays are ISO everywhere (settings.weekly_pay_day, API, UI): 1 = Monday ... 7 = Sunday.
+# Use iso_weekday(); never date.weekday(), which counts Monday as 0.
+ISO_MONDAY = 1
+ISO_SUNDAY = 7
+
+
+def iso_weekday(day: date) -> int:
+    """ISO weekday of a calendar date: 1 = Monday ... 7 = Sunday."""
+    return day.isoweekday()
+
 
 def _require_aware(value: datetime) -> None:
     if value.tzinfo is None or value.utcoffset() is None:

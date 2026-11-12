@@ -35,13 +35,20 @@ creates the PostgreSQL roles `app_owner` and `app_user` and the databases `arms_
 `arms_test`, writes `backend\.env` with random development passwords (gitignored, never
 printed), and applies the migrations.
 
+**Second checkout on a machine that is already set up:** the roles already exist, so setup
+stops (exit 2) instead of changing their passwords. Copy `backend\.env` from the first checkout,
+then run `setup.ps1` again. Only use `db-setup.ps1 -RotatePasswords` if you want new passwords
+for every checkout.
+
 ### 3. Everyday commands
 
 ```powershell
 .\scripts\dev.ps1        # API on :8000 (own window) + web app on http://127.0.0.1:5173
 .\scripts\check.ps1      # the gate: ruff, mypy, pytest, pip-audit, eslint, tsc, vitest, npm audit
 .\scripts\seed.ps1       # fake demo data into arms_dev (refuses APP_ENV=production)
-.\scripts\db-setup.ps1   # re-create roles/databases/backend\.env (keeps existing passwords)
+.\scripts\db-setup.ps1   # roles, databases, backend\.env; never changes existing role passwords
+.\scripts\db-setup.ps1 -DryRun           # show what it would do, change nothing
+.\scripts\db-setup.ps1 -RotatePasswords  # new role passwords (every checkout must update its .env)
 cd backend; ..\.venv\Scripts\alembic upgrade head   # apply migrations by hand
 ```
 

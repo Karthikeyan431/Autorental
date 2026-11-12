@@ -53,6 +53,10 @@ finally { Pop-Location }
 
 Write-Host '==> Databases and backend\.env' -ForegroundColor Cyan
 & (Join-Path $PSScriptRoot 'db-setup.ps1')
+if ($LASTEXITCODE -ne 0) {
+    # Exit 2: the roles exist but this checkout has no backend\.env (see db-setup.ps1 / README).
+    throw "db-setup.ps1 stopped (exit $LASTEXITCODE). Follow its message, then run setup.ps1 again."
+}
 
 Write-Host '==> Migrations (arms_dev)' -ForegroundColor Cyan
 Push-Location (Join-Path $root 'backend')

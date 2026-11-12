@@ -28,4 +28,13 @@ Decisions made with the agency lead. Client-facing rule changes still need the c
 | D15 | **No GitHub Actions for now;** `check.ps1` is the gate. Add the workflow if a private GitHub remote is added. | — |
 | D16 | **Default privileges:** tables `app_owner` creates get `app_user`'s base grants automatically. Insert-only tables have UPDATE, DELETE and TRUNCATE revoked in their migration, with a test. | data-model.md |
 | D17 | **Audit entries** are always written in the same database transaction as the change, with a rollback test. | data-model.md, CLAUDE.md |
-| D18 | *Proposed during the Week 1 build, agency lead to confirm:* an npm override pins `minimatch` 11.0.8 for ESLint tooling to clear a moderate dev-only advisory (see dependencies.md). | dependencies.md |
+| D18 | **Approved 13 Nov:** keep the npm override pinning `minimatch` 11.0.8 for the lint tools only (GHSA-g3hv-75wg-m249). Remove it once ESLint and typescript-eslint ship a fixed dependency. | dependencies.md |
+
+## 13 November 2026 (Week 1 review)
+
+| # | Decision | Docs updated |
+| --- | --- | --- |
+| D19 | **httpx2: not now.** Starlette's test client warns that `httpx` is deprecated in favour of `httpx2`. Keep `httpx` and revisit when Starlette drops `httpx` support (the warning becomes an error). | dependencies.md |
+| D20 | **The rent due time has no default.** From Week 5, agreement activation and accrual refuse with `RENT_DUE_TIME_NOT_SET` ("Set the rent due time in Settings") while it is not set, with tests. | week-05, CLAUDE.md |
+| D21 | **ISO weekdays everywhere:** 1 = Monday ... 7 = Sunday. Python uses `isoweekday()` (`app.core.time.iso_weekday`); the frontend uses `isoWeekday()`, and ESLint bans `getDay()`/`getUTCDay()`. Tested on both sides. | CLAUDE.md, data-model.md, week-05 |
+| D22 | **`db-setup.ps1` never changes an existing role's password.** It only creates what is missing. With roles present and no `.env` it refuses (exit 2). `-RotatePasswords` rotates on request; `-DryRun` previews. Tested with dry runs against a temporary env file. | README.md, CLAUDE.md |

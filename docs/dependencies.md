@@ -35,7 +35,7 @@ Every dependency must be **free and open source** (hard constraint 1). Versions 
 
 Transitive runtime packages (Starlette, anyio, Mako, python-dotenv and others) are pinned in `requirements.lock`.
 
-**Known notice:** Starlette now prints a deprecation warning that its test client should move from `httpx` to `httpx2`. Tests still pass. Switching needs approval because `httpx2` is a new package (open question for the agency lead).
+**Known notice (D19):** Starlette prints a deprecation warning that its test client should move from `httpx` to `httpx2`. Tests pass. Decision: keep `httpx` for now and revisit when Starlette drops `httpx` support.
 
 ## Frontend (Node 24 or newer)
 
@@ -69,7 +69,7 @@ Transitive runtime packages (Starlette, anyio, Mako, python-dotenv and others) a
 | @zxing/browser | 0.2.1 | MIT | 4 | Aadhaar QR scanning (behind a flag) |
 | @playwright/test | 1.65.0 | Apache-2.0 | 8 | End-to-end tests (dev) |
 
-### npm override
+### npm override (approved, D18)
 
 `package.json` overrides **minimatch to 11.0.8** (MIT). ESLint 10.14 and typescript-eslint 8.72.2 require `minimatch` ^10, and every 10.x release is affected by GHSA-g3hv-75wg-m249 (moderate ReDoS, fixed in 11.0.1). The override applies to dev tooling only; production dependencies had no findings. ESLint was checked to still run and to still report errors with the override in place. Remove the override once ESLint and typescript-eslint depend on a fixed `minimatch`.
 

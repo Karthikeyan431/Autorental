@@ -65,6 +65,9 @@ export const strings = {
     nothingHereYet: 'Nothing here yet.',
   },
 
+  /** ISO order: index 0 is weekday 1 (Monday), index 6 is weekday 7 (Sunday). */
+  weekdays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+
   pagination: {
     label: 'Pagination',
     previous: 'Previous page',

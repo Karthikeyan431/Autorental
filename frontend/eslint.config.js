@@ -21,6 +21,14 @@ export default defineConfig([
     },
     rules: {
       'no-console': ['error', { allow: ['warn', 'error'] }],
+      // Weekdays are ISO (1 = Monday ... 7 = Sunday). getDay() counts Sunday as 0.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.property.name=/^get(UTC)?Day$/]",
+          message: 'Use isoWeekday() from src/lib/weekday.ts (1 = Monday ... 7 = Sunday).',
+        },
+      ],
     },
   },
   {

@@ -75,7 +75,7 @@ docs/        requirements, rules, data model, milestones
 
 ```powershell
 .\scripts\setup.ps1      # one-time from a fresh clone: .venv (3.12), packages, db-setup, migrations
-.\scripts\db-setup.ps1   # roles app_owner/app_user, databases arms_dev/arms_test, backend\.env (never prints passwords)
+.\scripts\db-setup.ps1   # roles, databases, backend\.env; never changes an existing role's password (-RotatePasswords to rotate, -DryRun to preview)
 .\scripts\dev.ps1        # migrations, then API (uvicorn --reload, :8000, own window) and Vite (:5173, proxies /api)
 .\scripts\check.ps1      # the gate: ruff, mypy, pytest, pip-audit, eslint, tsc, vitest, npm audit
 .\scripts\seed.ps1       # load fake demo data into the dev database (refuses APP_ENV=production)
@@ -88,6 +88,8 @@ The venv lives at the repo root (`.venv`). Tests rebuild the `arms_test` schema 
 ## Time and money
 
 - Business time zone: `Asia/Kolkata`. Store timestamps as `timestamptz` in UTC. Rent dates are local calendar dates.
+- Weekdays are ISO everywhere: 1 = Monday ... 7 = Sunday (`weekly_pay_day`, API, UI). Python: `iso_weekday()` / `date.isoweekday()`, never `date.weekday()`. Frontend: `isoWeekday()` from `src/lib/weekday.ts`; `getDay()`/`getUTCDay()` are banned by ESLint (Sunday = 0).
+- The rent due time has no default. From Week 5, agreement activation and accrual refuse with `RENT_DUE_TIME_NOT_SET` ("Set the rent due time in Settings") until it is set.
 - Money is integer paise everywhere. ₹300 is `30000`. Show rupees with Indian digit grouping (₹1,20,000); whole amounts show no `.00`, and paise appear only when non-zero (₹1,20,000.50). Right-align money in tables. Excel exports keep real numbers with a 2-decimal rupee format.
 
 ## Reference docs (read the ones a milestone lists)
