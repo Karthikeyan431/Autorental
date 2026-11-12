@@ -1,0 +1,20 @@
+# Normalise text files to LF in the repository and working tree.
+* text=auto eol=lf
+
+# Windows scripts keep CRLF so PowerShell and cmd behave.
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files: never touch line endings or diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.xlsx binary
+*.woff binary
+*.woff2 binary
+*.zip binary
