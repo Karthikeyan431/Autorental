@@ -29,9 +29,9 @@ A responsive web app used only by the **owner** and up to **10 staff**. Drivers 
 
 ## Stack
 
-- **Backend:** Python 3.12 (create the venv with `py -3.12 -m venv .venv`; this laptop also has Python 3.14 as the `py` default, which we do not use), FastAPI, Pydantic v2, SQLAlchemy 2.0, Alembic, PostgreSQL 17. Libraries: argon2-cffi, PyJWT, pyotp, cryptography, Pillow, openpyxl, reportlab, qrcode, pywebpush. Tests: pytest. Lint and types: ruff, mypy.
-- **Frontend:** React and TypeScript with Vite, Tailwind CSS, React Router, TanStack Query, react-hook-form with zod, and @zxing/browser for QR scanning. Tests: Vitest and Testing Library. Playwright for a few end-to-end flows in Week 8.
-- **Versions:** use current stable releases of each, and pin them (lock files committed).
+- **Backend:** Python 3.12 (create the venv with `py -3.12 -m venv .venv`; this laptop also has Python 3.14 as the `py` default, which we do not use), FastAPI, Pydantic v2, pydantic-settings, SQLAlchemy 2.0, Alembic, psycopg 3 (binary), uvicorn, PostgreSQL 17. Libraries: argon2-cffi, PyJWT, pyotp, cryptography, Pillow, openpyxl, reportlab, qrcode, pywebpush, python-multipart, APScheduler (development scheduling only; production uses the systemd timer). Tests: pytest, httpx. Lint, types and audit: ruff, mypy, pip-audit.
+- **Frontend:** React and TypeScript with Vite, Tailwind CSS, React Router, TanStack Query, react-hook-form with zod, and @zxing/browser for QR scanning. Tests: Vitest and Testing Library. Lint and format: ESLint, Prettier. Playwright for a few end-to-end flows in Week 8.
+- **Versions:** use current stable releases of each, and pin them (lock files committed). Every dependency must be free and open source. `docs/dependencies.md` lists each package with its version and licence; update it whenever a dependency is added or upgraded.
 - **Development:** Windows with PowerShell. Tests run against a real PostgreSQL test database, never SQLite, because the constraints matter.
 - **Production:** Ubuntu on Oracle Cloud Always Free (Arm64), Caddy for HTTPS (Let's Encrypt), systemd services, and a free subdomain. See `docs/deployment.md`.
 
@@ -73,8 +73,8 @@ docs/        requirements, rules, data model, milestones
 
 ```powershell
 .\scripts\dev.ps1        # start backend (uvicorn --reload) and frontend (vite)
-.\scripts\check.ps1      # ruff, mypy, pytest, eslint, tsc, vitest
-.\scripts\seed.ps1       # load fake demo data into the dev database
+.\scripts\check.ps1      # ruff, mypy, pytest, pip-audit, eslint, tsc, vitest, npm audit
+.\scripts\seed.ps1       # load fake demo data into the dev database (refuses APP_ENV=production)
 cd backend; alembic upgrade head
 ```
 
@@ -94,6 +94,8 @@ cd backend; alembic upgrade head
 - `docs/security.md`: authentication, permissions, files, audit, backups
 - `docs/open-questions.md`: open client questions and the defaults to build
 - `docs/deployment.md`: free hosting on Oracle Cloud
+- `docs/dependencies.md`: every package, its pinned version and licence
+- `docs/decisions.md`: decisions made with the agency lead, with dates
 - `docs/milestones/week-01.md` to `week-08.md`
 
 ## Glossary

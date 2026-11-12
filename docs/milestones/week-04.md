@@ -33,6 +33,7 @@
 - `vehicle_compliance` with documents and expiry alerts (insurance, fitness, permit by default; Q29).
 - `maintenance_records`; setting `maintenance` and back.
 - UI: autos list and detail, papers, maintenance.
+- **Seed:** add 5 fake autos (obviously fake registration numbers).
 
 ## Out of scope
 

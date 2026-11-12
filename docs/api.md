@@ -33,7 +33,7 @@ Status codes:
 | Documents | `GET /documents/{id}/content` (streamed, audited) · `GET /documents/{id}` (metadata) | By permission |
 | Vehicles | `GET, POST /vehicles` · `GET, PATCH /vehicles/{id}` · `POST /vehicles/{id}/status` · `GET, POST /vehicles/{id}/compliance` · `GET, POST /vehicles/{id}/maintenance` | Staff, owner |
 | Agreements | `GET, POST /agreements` · `GET /agreements/{id}` · `POST /agreements/{id}/activate` · `/end` · `/cancel` · `GET /agreements/{id}/print` (PDF) · `POST /agreements/{id}/signed-copy` | Staff, owner |
-| Rent | `GET /drivers/{id}/ledger?from&to` · `GET /rent/overdue` · `POST /rent/charges/{id}/adjustments` · `POST /adjustments/{id}/decision` (owner) · `POST /jobs/accrue` (owner, manual run) | Staff, owner |
+| Rent | `GET /drivers/{id}/ledger?from&to` · `GET /rent/overdue` · `POST /rent/charges/{id}/adjustments` (`adjustments.request`) · `POST /adjustments/{id}/decision` (owner, `adjustments.decide`) · `POST /jobs/accrue` (owner, manual run) | Staff, owner |
 | Pay requests | `GET /pay-requests?date=` · `POST /pay-requests/generate` (idempotent) · `GET /pay-requests/{id}` (link, QR, WhatsApp URL) · `GET /pay-requests/{id}/qr.png` · `POST /pay-requests/{id}/sent` | Staff, owner |
 | Payments | `GET, POST /payments` · `GET /payments/{id}` · `PUT /payments/{id}/allocations` (confirm days) · `POST /payments/approve` (ids[]) · `POST /payments/{id}/reject` · `GET /payments/{id}/receipt.pdf` · `POST /payments/{id}/reversal-requests` · `POST /reversal-requests/{id}/decision` (owner) | Staff record; owner approves |
 | Statements | `GET, POST /bank-statements` (upload) · `GET, POST /bank-profiles` · `GET /bank-statements/{id}/lines` · `POST /statement-lines/{id}/match` · `POST /statement-lines/{id}/ignore` · `POST /bank-statements/{id}/confirm-strong` | Owner; staff with `statements.upload` |
@@ -53,6 +53,12 @@ Every report total must equal the ledger queries; add a test per report.
 
 ## Permission codes (starting list)
 
-`drivers.create`, `drivers.edit_own`, `drivers.edit_any`, `drivers.reassign` (owner), `drivers.restrict`, `kyc.decide`, `kyc.reopen` (owner), `vehicles.manage`, `agreements.manage`, `payrequests.send`, `payments.record`, `payments.approve` (owner), `payments.reverse_decide` (owner), `statements.upload`, `advance.decide` (owner), `escalations.raise` (owner), `escalations.work`, `reports.all`, `settings.manage` (owner), `users.manage` (owner), `audit.view` (owner).
+`drivers.create`, `drivers.edit_own`, `drivers.edit_any`, `drivers.reassign` (owner), `drivers.restrict`, `kyc.decide`, `kyc.reopen` (owner), `vehicles.manage`, `agreements.manage`, `payrequests.send`, `payments.record`, `payments.approve` (owner), `payments.reverse_decide` (owner), `adjustments.request`, `adjustments.decide` (owner), `statements.upload`, `advance.decide` (owner), `escalations.raise` (owner), `escalations.work`, `reports.all`, `settings.manage` (owner), `users.manage` (owner), `audit.view` (owner).
 
 Owner-only codes cannot be granted to staff.
+
+| Code | Covers | Staff default | Grantable to staff |
+| --- | --- | --- | --- |
+| `drivers.restrict` | Place or lift a restriction; suspend or reactivate a driver | Off | Yes |
+| `adjustments.request` | Request a charge adjustment | On | n/a |
+| `adjustments.decide` | Decide a charge adjustment | Off | Never (owner only) |

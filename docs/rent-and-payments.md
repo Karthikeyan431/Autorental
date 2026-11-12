@@ -6,6 +6,7 @@ Rent is a ledger of daily charges. Payments are a separate list, and allocations
 
 - For each active agreement, the job creates one charge for every date from `start_date` to today (or `end_date`) that has none yet. There is no weekday or holiday logic, so Sundays and holidays are charged by construction.
 - Each charge copies the agreement's `daily_rent_paise`. It also stores `due_at`, computed from the settings version in force when the charge is created: `rent_date + due_day_offset` at `rent_due_time`, in Asia/Kolkata, stored as UTC. Later settings changes affect only new charges.
+- **Weekly drivers** (N3, awaiting client confirmation): weekly means paying in arrears for days already charged (Q16 stays). For a driver whose `payment_rhythm` is `weekly` when the charge is created, `due_at` is the first `weekly_pay_day` on or after `rent_date + due_day_offset`, at `rent_due_time`. So mid-week days are not overdue until the weekly pay day. Changing a driver's rhythm affects only charges created afterwards. Daily stays the default.
 - The job is an idempotent CLI command (`python -m app.jobs.accrue`). In production it runs every 15 minutes from a systemd timer, and also on app start. The unique constraint makes re-runs harmless and fills days missed during downtime.
 - The start day and end day both count as full days (Q2 default).
 
@@ -35,7 +36,7 @@ Before the owner approves the ₹700, outstanding is ₹1,200 and every day show
 ## 2. Pay requests (the free replacement for Autopay)
 
 - **Settings:** `business_upi_id`, `upi_payee_name`, `whatsapp_template`. Each driver has a `payment_rhythm` (daily by default, or weekly, N3).
-- **Generation:** an idempotent job and button. Each day at `pay_request_time` (setting, default 08:00, so drivers can pay before the due time; N4), or on `weekly_pay_day` for weekly drivers, the system creates one `pay_request` per driver per period with **amount = outstanding up to and including that period** (rule 18). Do not create one for drivers without an active agreement. If an open request already exists for the driver, mark it `superseded` and create the new one, keeping a single open request per driver.
+- **Generation:** an idempotent job and button. Each day at `pay_request_time` (setting, default 08:00, so drivers can pay before the due time; N4), or on `weekly_pay_day` for weekly drivers, the system creates one `pay_request` per driver per period with **amount = outstanding up to and including that period** (rule 18). Because future days never accrue (Q16), this is the outstanding on days already charged; for a weekly driver it is the past week's arrears plus any older balance. Do not create one for drivers without an active agreement. If an open request already exists for the driver, mark it `superseded` and create the new one, keeping a single open request per driver.
 - **Reference code:** `R` + 4-digit driver number + `MMDD` of the period start, for example `R00421112`. Letters and digits only, because banks strip symbols from narrations.
 - **UPI link:** `upi://pay?pa={business_upi_id}&pn={urlencoded payee name}&am={rupees with 2 decimals}&cu=INR&tn={reference_code}` (add `tr={reference_code}` if the bank's merchant UPI ID needs it). The QR encodes the same link (Python `qrcode` → PNG).
 - **WhatsApp:** `https://wa.me/91{driver mobile}?text={urlencoded message}`. The default template is "Hello {name}, today's auto rent is ₹{amount}. Pay here: {upi_link} Ref {reference_code}. Thank you, {business_name}". Staff tap Send, WhatsApp opens on their phone, and they press Send. The app records `sent_by`, `sent_at` and `send_count` when the button is tapped.
@@ -55,10 +56,10 @@ Before the owner approves the ₹700, outstanding is ₹1,200 and every day show
 2. **Mapping:** the first time for a bank, map the columns (date, narration, reference, credit, debit, balance, date format, header row) and save it as a `bank_profile`.
 3. **Parse:** keep credit rows only and convert amounts to paise exactly (parse text with `Decimal`, never `float`). Compute a line fingerprint; skip lines already imported.
 4. **Match** each new line (never automatically approve):
-   - **Strong:** the narration contains an open pay request's `reference_code` (case-insensitive, ignoring spaces and symbols) **and** the amount equals the request amount.
+   - **Strong:** the narration contains the `reference_code` of a pay request that is open **or was superseded in the last 7 days** (case-insensitive, ignoring spaces and symbols) **and** the amount equals that request's amount. This catches drivers who pay yesterday's link late.
    - **Probable:** the amount equals an open request amount, the date is within the request period start to +3 days, and exactly one driver fits. Show why.
    - Otherwise **unmatched**. Staff can link it manually to a driver.
-5. **Review screen:** confirm strong matches in bulk. This creates payments with the request's suggested days confirmed (rule 4, done by the person clicking). Review probable matches one by one; unmatched lines can be ignored with a reason.
+5. **Review screen:** confirm strong matches in bulk. This creates payments with suggested days confirmed (rule 4, done by the person clicking). The suggested days are always **recomputed at confirm time** from the driver's oldest unpaid days, never taken from the matched request's stored `suggested_charge_ids`. Review probable matches one by one; unmatched lines can be ignored with a reason.
 6. Statement lines never change money by themselves.
 
 ## 5. Owner approval (rule 13)
@@ -71,7 +72,7 @@ Before the owner approves the ₹700, outstanding is ₹1,200 and every day show
   4. Issue the receipt number from the locked `receipt_counters` row.
   5. Write the audit entry.
   If a payment no longer fits, for example another payment was approved for the same day first, refuse that one with a clear reason and approve the rest.
-- **Reject:** needs a reason, which staff see. The allocations are discarded, and the pay request returns to `open` if it was linked.
+- **Reject:** needs a reason, which staff see. Its allocations are marked reversed (`reversed_at`, `reversed_by`, `reversal_reason = 'payment rejected'`); nothing is deleted (rule 11). The pay request returns to `open` if it was linked. A rejected payment releases its UPI reference and statement line, so the money can be re-recorded correctly.
 - **Receipt:** a PDF (reportlab) with business details, driver, amount, method, reference, days covered and receipt number. Staff can download it to share on WhatsApp.
 
 ## 6. Allocation transaction (rule 4)

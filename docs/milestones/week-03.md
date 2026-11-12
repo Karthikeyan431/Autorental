@@ -19,7 +19,8 @@
 - Driver photo upload (camera or file).
 - Consents (purpose, notice version, method, `captured_by`), required before any KYC attempt.
 - `kyc_checks` attempts and `kyc_events`; the manual method for identity (masked Aadhaar checklist) and licence (front and back plus typed details).
-- Staff decision with a checklist: approve, reject (reason required) or resubmit. Owner-only reopen, which creates a new attempt.
+- Staff decision with a checklist: approve, reject (reason required) or resubmit. Owner-only reopen, which creates a new attempt in `under_review`.
+- **Seed:** add 5 fake drivers ("Test Driver 001"…, mobiles starting `90000`, no real-looking identity numbers).
 - **Eligibility:** `check_eligibility()` exactly as in `kyc.md`, and `GET /drivers/{id}/eligibility`.
 - **KYC queue** endpoint with filters.
 - A licence expiry job that marks approved licences `expired` and creates alerts at 30 days and on expiry (Q23).
@@ -42,7 +43,7 @@ UIDAI QR, Parivahan lookup (Week 4), agreements and money.
 - Staff can edit only drivers they manage (N1 default); the owner can edit all.
 - A KYC attempt without consent is refused (`CONSENT_REQUIRED`).
 - Approving identity leaves the licence unapproved (rule 7); history keeps every attempt and event.
-- Staff can decide (`kyc.decide`); staff cannot reopen; the owner reopen creates attempt 2.
+- Staff can decide (`kyc.decide`); staff cannot reopen; the owner reopen creates attempt 2 in `under_review`, and attempt 1 keeps its status and history.
 - Eligibility: each condition failing alone returns its reason; all passing returns ok. A licence valid until yesterday gives `LICENCE_EXPIRED`; valid until today is ok.
 - A duplicate mobile or licence number is refused.
 - Documents:

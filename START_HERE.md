@@ -75,6 +75,6 @@ Open `docs/open-questions.md`, write the answer in the **Answer** column, and te
 ## 6. What the client sets up (all free)
 
 - A merchant UPI ID or QR from the business's bank (Week 6 needs it).
-- An Oracle Cloud Always Free account (Week 1 for the server, Week 8 for go-live). Sign-up asks for a card to verify identity.
+- An Oracle Cloud Always Free account. The client creates it early, outside the code (sign-up asks for a card to verify identity); no server work happens until Week 8, when we deploy and go live.
 - A free email account for system emails.
 - Test Aadhaar QR and licence lookups use **made-up data only** until go-live.

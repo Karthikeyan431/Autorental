@@ -16,12 +16,13 @@
   4. Set the agreement `active` and the vehicle `rented`.
   5. Write the audit entry.
   Refuse with all the reason codes.
-- **End:** set the end date (the return day is charged in full, Q2). The vehicle becomes `available` from the next day (Q1).
+- **End:** set the end date (the return day is charged in full, Q2). The vehicle is set to `available` at once; the `[]` exclusion constraint and the eligibility check stop a new agreement starting on the return day (Q1), and the UI shows "available from <return day + 1>".
 - All constraints from `data-model.md`: partial unique indexes and exclusion constraints.
 - Printable agreement PDF (reportlab) from a **placeholder template** with business details, driver, auto, rate and dates. We write no legal terms (Q13). Upload of the signed copy.
 
 **Rent engine**
-- `rent_charges`, with the accrual CLI `python -m app.jobs.accrue`. It is idempotent, catches up missed days, and snapshots `due_at` and `settings_version_id`.
+- `rent_charges`, with the accrual CLI `python -m app.jobs.accrue`. It is idempotent, catches up missed days, and snapshots `due_at` and `settings_version_id`. For weekly drivers, `due_at` is the first `weekly_pay_day` on or after the rent date at the due time (N3, `rent-and-payments.md` §1).
+- Charge adjustment permissions: `adjustments.request` and `adjustments.decide` (owner only).
 - In development, run it with APScheduler or by hand. The production timer comes in Week 8.
 - Ledger queries for day balance, outstanding and overdue per the formulas, as SQL views or service queries (no stored totals).
 - Charge adjustments: staff request, owner decides; only approved ones count (Q11).
@@ -49,6 +50,8 @@ Recording payments, pay requests and approvals (Week 6). Until then, allocations
 - Two staff activating the same vehicle for different drivers at the same moment: exactly one succeeds (concurrency test with two connections).
 - The worked example in `rent-and-payments.md` §1 reproduces exactly (balances ₹0, ₹0, ₹200, ₹300; ₹500 overdue at 18:00 on 5 November).
 - An approved adjustment of −₹300 waives a day; a pending one changes nothing.
+- A weekly driver's mid-week charges are not overdue before the weekly pay day and are overdue after its due time; switching a driver's rhythm leaves existing charges' `due_at` unchanged.
+- After an agreement ends, a new agreement for the same auto starting on the return day is refused; one starting the next day is allowed.
 
 ## Done when
 
