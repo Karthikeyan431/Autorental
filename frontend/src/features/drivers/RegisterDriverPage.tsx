@@ -171,6 +171,7 @@ function WizardStep({
             checkType={checkType}
             attempt={data[checkType]}
             acceptedIdTypes={data.accepted_id_types}
+            methods={data.available_methods[checkType]}
             defaultName={driver.full_name}
             onChanged={refresh}
           />

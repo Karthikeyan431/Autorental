@@ -92,6 +92,11 @@ Status codes:
 - `POST /drivers/{id}/reveal` `{field, attempt_id?}` → `{field, value}` with `Cache-Control: no-store`. Fields: `address`, `date_of_birth`, `licence_number`, `licence_date_of_birth`, `id_dob_or_yob`, `id_gender`; KYC fields come from the current attempt unless `attempt_id` names an older attempt of the same driver. Owner and current manager only (403 `REVEAL_NOT_ALLOWED`); an unknown driver, field or missing value gives 404; over `reveal_limit_per_hour` gives 429 `REVEAL_RATE_LIMITED`. Each reveal writes one `driver.field_revealed` audit entry (field name only), shown in the Activity tab.
 - `PATCH /drivers/{id}`: the masked fields may be sent only by the owner or the current manager (403 `FIELD_NOT_EDITABLE`); blank or null keeps the current value. The KYC detail forms work the same way: a blank licence number, date of birth, date or year of birth or gender keeps the saved value.
 - KYC capture (consent, attempts, details, uploads, submit) and decisions are for the owner and the current manager (D46, D49): others who can see the KYC get 403 `DRIVER_NOT_EDITABLE` for capture and 403 `KYC_DECIDE_NOT_ALLOWED` for a decision; KYC document content gives them 404.
+- **KYC methods (Week 4, rule 8):** `GET /drivers/{id}/kyc` returns `available_methods` `{identity: [...], licence: [...]}`; a new attempt names one. Each attempt returns `method_label` (honest wording, e.g. "Checked by staff with the UIDAI app"), `evidence`, and its own `checklist` and `required_documents`.
+  - `PUT .../identity-details` and `.../licence-details`: `manual` and `demo` attempts only.
+  - `POST /kyc/attempts/{id}/uidai-app-attestation` `{name_on_document, dob_or_yob?, id_last4, gender?, signature_valid}`: 404 while `AADHAAR_APP_ATTEST_ENABLED` is off (checked before the body). Optional upload `attestation_screenshot`. `signature_valid: false` is kept in `evidence.uidai_app_signature_valid` and approval gives 409 `UIDAI_SIGNATURE_NOT_VALID`.
+  - `POST /kyc/attempts/{id}/parivahan-lookup`: the licence-details body plus `lookup_status_text` and `looked_up_at`. Upload `lookup_screenshot` before submit (`KYC_INCOMPLETE` lists it); licence card photos are optional. The server never calls the Parivahan site.
+  - `demo` (development and test only): no documents, `is_simulated: true`, decided by a person like any other; production refuses to start while a current check is simulated.
 
 | Code | Status | When |
 | --- | --- | --- |
@@ -105,7 +110,10 @@ Status codes:
 | `INVALID_LICENCE_NUMBER` | 422 | Not 6 to 20 letters and digits after removing spaces and dashes |
 | `MANAGER_NOT_AVAILABLE` / `SAME_MANAGER` | 409 | Change manager to an inactive or unknown user / the current manager |
 | `CONSENT_REQUIRED` | 409 | A KYC attempt before a `kyc` consent (or after it was withdrawn) |
-| `KYC_METHOD_NOT_AVAILABLE` | 409 | A method other than `manual` (Week 4 adds `parivahan_lookup` and `uidai_app_attested`, whose endpoint gives 404 while its flag is off, D47; `uidai_qr` stays refused until it is built, D48) |
+| `KYC_METHOD_NOT_AVAILABLE` | 409 | A method not in the driver's `available_methods` (Week 4: `manual` for both checks, `parivahan_lookup` for the licence, `uidai_app_attested` with `AADHAAR_APP_ATTEST_ENABLED`, `demo` with `DEMO_VERIFIER_ENABLED` outside production; `uidai_qr` is never offered until it is built, D48) |
+| `KYC_WRONG_METHOD` | 409 | A details, attestation or Parivahan endpoint used on an attempt of another method (`details.method` names it) |
+| `UIDAI_SIGNATURE_NOT_VALID` | 409 | Approving an attestation that recorded "signature not valid"; the record is kept, reject or ask again (D49) |
+| `LOOKUP_TIME_IN_FUTURE` | 422 | A Parivahan lookup time more than 5 minutes ahead of the server clock |
 | `KYC_ATTEMPT_OPEN` / `KYC_REOPEN_REQUIRED` | 409 | A new attempt while one is open / after approval or rejection (owner reopen only, D34) |
 | `ATTEMPT_NOT_EDITABLE` | 409 | Details or uploads on an attempt that is no longer a draft |
 | `KYC_INCOMPLETE` | 409 | Submit without details or a required document (`details.missing`) |

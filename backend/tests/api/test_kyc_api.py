@@ -215,7 +215,9 @@ def test_a_submitted_attempt_is_no_longer_editable(api: TestClient, team: Team) 
     assert error_code(upload(api, team.staff_a, attempt, "id_back")) == "ATTEMPT_NOT_EDITABLE"
 
 
-def test_only_manual_is_available_this_week(api: TestClient, team: Team) -> None:
+def test_uidai_qr_is_not_available_until_n13_is_answered(api: TestClient, team: Team) -> None:
+    """D48: the in-app Secure QR decoder is not built; Week 4 adds other methods (see
+    test_kyc_methods.py), but a new uidai_qr attempt is still refused."""
     driver = create_driver(api, team.staff_a)
     record_consent(api, team.staff_a, driver["id"])
     response = api.post(

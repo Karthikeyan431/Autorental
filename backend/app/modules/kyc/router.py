@@ -11,12 +11,14 @@ from app.core.pagination import Page, PageParams, page_params
 from app.core.permissions import CurrentUser, Permission, authenticated, require
 from app.core.request_context import client_ip
 from app.modules.documents.schemas import DocumentOut, document_out
+from app.modules.drivers.access import not_found
 from app.modules.drivers.router import read_upload
 from app.modules.kyc import service
 from app.modules.kyc.eligibility import REASON_MESSAGES
 from app.modules.kyc.schemas import (
     AttemptCreate,
     AttemptOut,
+    AttestationIn,
     Bucket,
     CheckType,
     ConsentCreate,
@@ -27,6 +29,7 @@ from app.modules.kyc.schemas import (
     EligibilityOut,
     IdentityDetailsIn,
     LicenceDetailsIn,
+    ParivahanLookupIn,
     QueueCounts,
     QueueItem,
     ReopenIn,
@@ -77,8 +80,10 @@ def withdraw_consent(
 
 
 @router.get("/drivers/{driver_id}/kyc", response_model=DriverKycOut)
-def driver_kyc(driver_id: int, session: DbSession, user: SignedIn) -> DriverKycOut:
-    return service.driver_kyc(session, user, driver_id)
+def driver_kyc(
+    driver_id: int, request: Request, session: DbSession, user: SignedIn
+) -> DriverKycOut:
+    return service.driver_kyc(session, request.app.state.settings, user, driver_id)
 
 
 @router.post(
@@ -96,6 +101,7 @@ def start_attempt(
 ) -> AttemptOut:
     check = service.start_attempt(
         session,
+        request.app.state.settings,
         user,
         driver_id,
         check_type=check_type,
@@ -131,6 +137,45 @@ def save_licence_details(
     user: SignedIn,
 ) -> AttemptOut:
     check = service.save_licence_details(
+        session, request.app.state.settings, user, attempt_id, body, ip=client_ip(request)
+    )
+    return service.attempt_out(session, check)
+
+
+@router.post("/kyc/attempts/{attempt_id}/parivahan-lookup", response_model=AttemptOut)
+def save_parivahan_lookup(
+    attempt_id: int,
+    body: ParivahanLookupIn,
+    request: Request,
+    session: DbSession,
+    user: SignedIn,
+) -> AttemptOut:
+    check = service.save_parivahan_lookup(
+        session, request.app.state.settings, user, attempt_id, body, ip=client_ip(request)
+    )
+    return service.attempt_out(session, check)
+
+
+def attestation_enabled(request: Request) -> None:
+    """Runs before the body is read, so with the flag off every request gets the same 404."""
+    if not request.app.state.settings.AADHAAR_APP_ATTEST_ENABLED:
+        raise not_found()
+
+
+@router.post(
+    "/kyc/attempts/{attempt_id}/uidai-app-attestation",
+    response_model=AttemptOut,
+    dependencies=[Depends(attestation_enabled)],
+)
+def save_attestation(
+    attempt_id: int,
+    body: AttestationIn,
+    request: Request,
+    session: DbSession,
+    user: SignedIn,
+) -> AttemptOut:
+    """404 while AADHAAR_APP_ATTEST_ENABLED is off (D47)."""
+    check = service.save_attestation(
         session, request.app.state.settings, user, attempt_id, body, ip=client_ip(request)
     )
     return service.attempt_out(session, check)

@@ -289,6 +289,8 @@ export const strings = {
       id_back: 'ID back',
       licence_front: 'Licence front',
       licence_back: 'Licence back',
+      lookup_screenshot: 'Parivahan screenshot',
+      attestation_screenshot: 'UIDAI app screenshot (masked)',
     } as Record<string, string>,
   },
 
@@ -444,6 +446,33 @@ export const strings = {
     } as Record<string, string>,
     notStarted: 'Not started',
     methodManual: 'Manual review',
+    method: 'Method',
+    chooseMethod: 'How will you check this?',
+    methodOptions: {
+      manual: 'Manual review of the documents',
+      parivahan_lookup: 'Parivahan lookup (official site)',
+      uidai_app_attested: 'Checked by staff with the UIDAI app',
+      demo: 'DEMO – not real (development only)',
+    } as Record<string, string>,
+    demoWarning:
+      'DEMO – not real. Use made-up details only. A person still decides, and a demo check never counts in production.',
+    openParivahan: 'Open Parivahan',
+    parivahanHint:
+      'Opens the official Parivahan licence status page in a new tab. Enter the licence number and date of birth there, then record what it shows here and upload a screenshot.',
+    lookupStatus: 'Status shown on Parivahan',
+    lookedUpAt: 'Time of the lookup',
+    lookedUpAtRequired: 'Enter when you looked the licence up.',
+    lookupStatusRequired: 'Enter the status Parivahan shows.',
+    lookupScreenshot: 'Parivahan screenshot (required)',
+    attestationIntro:
+      "Scan the driver's Aadhaar QR with UIDAI's own Aadhaar QR Scanner app on your phone, compare the result with the person, then record what the app showed.",
+    signatureValid: 'The UIDAI app showed the signature as valid',
+    signatureNotValidNote:
+      'If the app did not show the signature as valid, record that: the check cannot be approved, so ask for documents again or reject.',
+    signatureValidLabel: 'Signature shown as valid in the UIDAI app',
+    yes: 'Yes',
+    no: 'No',
+    attestationScreenshot: 'App screenshot, number masked (optional)',
     documentType: 'ID document',
     idTypes: {
       masked_aadhaar: 'Masked Aadhaar',

@@ -22,9 +22,12 @@ import type { KycStatus } from '../drivers/api';
 import {
   decideAttempt,
   fetchEligibility,
+  PARIVAHAN_DL_STATUS_URL,
   reopenAttempt,
+  saveAttestation,
   saveIdentity,
   saveLicence,
+  saveParivahanLookup,
   startAttempt,
   submitAttempt,
   uploadAttemptDocument,
@@ -32,6 +35,7 @@ import {
   type CheckType,
   type Decision,
   type IdDocumentType,
+  type KycMethod,
 } from './api';
 
 const k = strings.kyc;
@@ -56,6 +60,18 @@ export function StatusBadge({ status }: { status: KycStatus | null }) {
   return (
     <span className={`inline-block rounded-full border px-2 py-0.5 text-xs font-medium ${tone}`}>
       {label}
+    </span>
+  );
+}
+
+/** Shown wherever a simulated (demo) check appears (D49). */
+export function DemoBadge() {
+  return (
+    <span
+      data-testid="demo-badge"
+      className="inline-block rounded border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-950"
+    >
+      {k.simulated}
     </span>
   );
 }
@@ -118,8 +134,19 @@ export function AttemptDetails({
   // An older attempt is revealed by id; the current one by field alone.
   const attemptId = attempt.is_current ? undefined : attempt.id;
   const masked = (fields: string[], field: string) => fields.includes(field);
+  const signature = attempt.evidence.uidai_app_signature_valid;
   return (
     <dl>
+      <div className="flex justify-between gap-3 border-b border-slate-100 py-1 text-sm">
+        <dt className="text-slate-600">{k.method}</dt>
+        <dd className="flex flex-wrap items-center justify-end gap-2 text-right text-slate-900">
+          {attempt.method_label}
+          {attempt.is_simulated && <DemoBadge />}
+        </dd>
+      </div>
+      {typeof signature === 'boolean' && (
+        <DetailRow label={k.signatureValidLabel} value={signature ? k.yes : k.no} />
+      )}
       {idd && (
         <>
           <DetailRow label={k.documentType} value={k.idTypes[idd.document_type]} />
@@ -176,6 +203,12 @@ export function AttemptDetails({
           />
           <DetailRow label={k.vehicleClasses} value={lic.vehicle_classes.join(', ')} />
           <DetailRow label={k.issuingAuthority} value={lic.issuing_authority} />
+          {lic.lookup_status_text && (
+            <DetailRow label={k.lookupStatus} value={lic.lookup_status_text} />
+          )}
+          {lic.looked_up_at && (
+            <DetailRow label={k.lookedUpAt} value={formatDateTime(lic.looked_up_at)} />
+          )}
         </>
       )}
     </dl>
@@ -221,6 +254,8 @@ const licenceSchema = z
     valid_until_transport: optionalDate,
     vehicle_classes: noFullNumber(z.string().trim().min(1, k.vehicleClassesRequired).max(300)),
     issuing_authority: noFullNumber(z.string().trim().max(200)),
+    lookup_status_text: noFullNumber(z.string().trim().max(200)),
+    looked_up_at: z.string(),
   })
   .refine((v) => v.valid_until_non_transport || v.valid_until_transport, {
     message: k.validityRequired,
@@ -228,26 +263,53 @@ const licenceSchema = z
   });
 type LicenceForm = z.infer<typeof licenceSchema>;
 
-const DOC_TYPES: Record<CheckType, { key: string; label: string }[]> = {
-  identity: [
+const attestationSchema = z.object({
+  name_on_document: noFullNumber(z.string().trim().min(1, strings.drivers.nameRequired).max(200)),
+  id_last4: z.string().regex(/^\d{4}$/, k.idLast4Invalid),
+  // Masked (D45): not pre-filled; blank keeps the saved value. The first save needs it.
+  dob_or_yob: z.string().regex(/^(\d{4}(-\d{2}-\d{2})?)?$/, k.dobOrYobInvalid),
+  signature_valid: z.enum(['yes', 'no']),
+});
+type AttestationForm = z.infer<typeof attestationSchema>;
+
+/** Uploads offered per method (the server enforces the same lists and the required ones). */
+const DOC_TYPES: Record<string, { key: string; label: string }[]> = {
+  'identity:manual': [
     { key: 'id_front', label: k.idFront },
     { key: 'id_back', label: k.idBack },
   ],
-  licence: [
+  'identity:uidai_app_attested': [
+    { key: 'attestation_screenshot', label: k.attestationScreenshot },
+  ],
+  'licence:manual': [
+    { key: 'licence_front', label: k.licenceFront },
+    { key: 'licence_back', label: k.licenceBack },
+  ],
+  'licence:parivahan_lookup': [
+    { key: 'lookup_screenshot', label: k.lookupScreenshot },
     { key: 'licence_front', label: k.licenceFront },
     { key: 'licence_back', label: k.licenceBack },
   ],
 };
 
+/** A local date-time for <input type="datetime-local">, e.g. 2026-11-13T10:30. */
+function localDateTime(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`;
+}
+
 /**
- * Capture one check by manual review: details, uploads and submit. Starts a draft attempt the
- * first time something is saved, so every step is kept on the server (a draft per step).
+ * Capture one check: choose the method, then details, uploads and submit. Starts a draft
+ * attempt the first time something is saved, so every step is kept on the server.
  */
 export function KycCheckEditor({
   driverId,
   checkType,
   attempt,
   acceptedIdTypes,
+  methods,
   defaultName,
   onChanged,
 }: {
@@ -255,6 +317,8 @@ export function KycCheckEditor({
   checkType: CheckType;
   attempt: Attempt | null;
   acceptedIdTypes: IdDocumentType[];
+  /** From the server (flags, D47, D48); `manual` is always first. */
+  methods: KycMethod[];
   defaultName: string;
   onChanged: () => Promise<unknown> | void;
 }) {
@@ -265,10 +329,13 @@ export function KycCheckEditor({
   const isDraft = attempt?.status === 'draft';
   const canStartNew =
     attempt === null || attempt.status === 'resubmission_required' || attempt.status === 'expired';
+  const [chosen, setChosen] = useState<KycMethod>(methods[0] ?? 'manual');
+  // A draft keeps its method; a new attempt uses the one chosen here.
+  const method: KycMethod = attempt && isDraft ? attempt.method : chosen;
 
   const ensureDraft = async (): Promise<number> => {
     if (attempt && isDraft) return attempt.id;
-    const created = await startAttempt(driverId, checkType);
+    const created = await startAttempt(driverId, checkType, method);
     return created.id;
   };
 
@@ -316,6 +383,8 @@ export function KycCheckEditor({
   }
 
   const uploadedTypes = new Set(attempt && isDraft ? attempt.documents.map((d) => d.doc_type) : []);
+  const docs = DOC_TYPES[`${checkType}:${method}`] ?? [];
+  const draftAttempt = isDraft ? attempt : null;
   return (
     <div className="flex flex-col gap-4">
       {attempt && !isDraft && (
@@ -325,7 +394,67 @@ export function KycCheckEditor({
         </Alert>
       )}
       {error && <Alert>{error}</Alert>}
-      {checkType === 'identity' ? (
+      {!isDraft && methods.length > 1 && (
+        <Select
+          label={k.chooseMethod}
+          value={chosen}
+          options={methods.map((value) => ({ value, label: k.methodOptions[value] ?? value }))}
+          onChange={(event) => setChosen(event.target.value as KycMethod)}
+        />
+      )}
+      {isDraft && attempt && (
+        <p className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+          {k.method}: {attempt.method_label}
+          {attempt.is_simulated && <DemoBadge />}
+        </p>
+      )}
+      {method === 'demo' && (
+        <Alert tone="info">
+          <span className="flex flex-col gap-1">
+            <DemoBadge />
+            {k.demoWarning}
+          </span>
+        </Alert>
+      )}
+      {method === 'uidai_app_attested' ? (
+        <AttestationFormFields
+          attempt={draftAttempt}
+          defaultName={defaultName}
+          onSave={async (values) => {
+            const attemptId = await ensureDraft();
+            await saveAttestation(attemptId, values);
+            await onChanged();
+          }}
+        />
+      ) : method === 'parivahan_lookup' ? (
+        <>
+          <div className="flex flex-col gap-1">
+            <a
+              href={PARIVAHAN_DL_STATUS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex w-fit items-center rounded-md border border-teal-700 px-3 py-2 text-sm font-medium text-teal-800 hover:bg-teal-50"
+            >
+              {k.openParivahan}
+            </a>
+            <p className="text-xs text-slate-600">{k.parivahanHint}</p>
+          </div>
+          <LicenceFormFields
+            attempt={draftAttempt}
+            defaultName={defaultName}
+            lookup
+            onSave={async (values) => {
+              const attemptId = await ensureDraft();
+              await saveParivahanLookup(attemptId, {
+                ...values,
+                lookup_status_text: values.lookup_status_text ?? '',
+                looked_up_at: values.looked_up_at ?? '',
+              });
+              await onChanged();
+            }}
+          />
+        </>
+      ) : checkType === 'identity' ? (
         <IdentityFormFields
           attempt={isDraft ? attempt : null}
           acceptedIdTypes={acceptedIdTypes}
@@ -347,9 +476,11 @@ export function KycCheckEditor({
           }}
         />
       )}
-      {checkType === 'identity' && <Alert tone="info">{k.maskedWarning}</Alert>}
+      {checkType === 'identity' && method !== 'demo' && (
+        <Alert tone="info">{k.maskedWarning}</Alert>
+      )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {DOC_TYPES[checkType].map((doc) => (
+        {docs.map((doc) => (
           <CaptureInput
             key={doc.key}
             label={doc.label}
@@ -453,14 +584,22 @@ function IdentityFormFields({
   );
 }
 
+type LicenceValues = Parameters<typeof saveLicence>[1] & {
+  lookup_status_text?: string;
+  looked_up_at?: string;
+};
+
 function LicenceFormFields({
   attempt,
   defaultName,
+  lookup = false,
   onSave,
 }: {
   attempt: Attempt | null;
   defaultName: string;
-  onSave: (values: Parameters<typeof saveLicence>[1]) => Promise<void>;
+  /** The Parivahan lookup record: adds the status text and the lookup time. */
+  lookup?: boolean;
+  onSave: (values: LicenceValues) => Promise<void>;
 }) {
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
@@ -476,6 +615,10 @@ function LicenceFormFields({
       valid_until_transport: saved?.valid_until_transport ?? '',
       vehicle_classes: saved?.vehicle_classes.join(', ') ?? '',
       issuing_authority: saved?.issuing_authority ?? '',
+      lookup_status_text: saved?.lookup_status_text ?? '',
+      looked_up_at: saved?.looked_up_at
+        ? localDateTime(new Date(saved.looked_up_at))
+        : localDateTime(new Date()),
     },
   });
   const { errors, isSubmitting } = form.formState;
@@ -485,8 +628,23 @@ function LicenceFormFields({
       form.setError('licence_number', { message: k.licenceNumberRequired });
       return;
     }
+    if (lookup && !values.lookup_status_text) {
+      form.setError('lookup_status_text', { message: k.lookupStatusRequired });
+      return;
+    }
+    if (lookup && !values.looked_up_at) {
+      form.setError('looked_up_at', { message: k.lookedUpAtRequired });
+      return;
+    }
     try {
       await onSave({
+        ...(lookup
+          ? {
+              lookup_status_text: values.lookup_status_text,
+              // The browser's local time, sent with its offset as an ISO instant.
+              looked_up_at: new Date(values.looked_up_at).toISOString(),
+            }
+          : {}),
         licence_number: values.licence_number || null,
         name_on_licence: values.name_on_licence,
         date_of_birth: values.date_of_birth || null,
@@ -547,6 +705,110 @@ function LicenceFormFields({
         label={k.issuingAuthority}
         error={errors.issuing_authority?.message}
         {...form.register('issuing_authority')}
+      />
+      {lookup && (
+        <>
+          <Input
+            label={k.lookupStatus}
+            error={errors.lookup_status_text?.message}
+            {...form.register('lookup_status_text')}
+          />
+          <Input
+            label={k.lookedUpAt}
+            type="datetime-local"
+            error={errors.looked_up_at?.message}
+            {...form.register('looked_up_at')}
+          />
+        </>
+      )}
+      <div className="flex justify-end sm:col-span-2">
+        <Button type="submit" variant="secondary" loading={isSubmitting}>
+          {k.saveDetails}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function AttestationFormFields({
+  attempt,
+  defaultName,
+  onSave,
+}: {
+  attempt: Attempt | null;
+  defaultName: string;
+  onSave: (values: Parameters<typeof saveAttestation>[1]) => Promise<void>;
+}) {
+  const toast = useToast();
+  const [error, setError] = useState<string | null>(null);
+  const saved = attempt?.identity_details;
+  const savedSignature = attempt?.evidence.uidai_app_signature_valid;
+  const form = useForm<AttestationForm>({
+    resolver: zodResolver(attestationSchema),
+    defaultValues: {
+      name_on_document: saved?.name_on_document ?? defaultName,
+      id_last4: saved?.id_last4 ?? '',
+      dob_or_yob: '',
+      signature_valid: savedSignature === false ? 'no' : 'yes',
+    },
+  });
+  const { errors, isSubmitting } = form.formState;
+  const onSubmit = form.handleSubmit(async (values) => {
+    setError(null);
+    if (!saved && !values.dob_or_yob) {
+      form.setError('dob_or_yob', { message: k.dobOrYobRequired });
+      return;
+    }
+    try {
+      await onSave({
+        name_on_document: values.name_on_document,
+        id_last4: values.id_last4,
+        dob_or_yob: values.dob_or_yob || null,
+        signature_valid: values.signature_valid === 'yes',
+      });
+      toast.show({ message: k.detailsSaved, tone: 'success' });
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  });
+  return (
+    <form noValidate onSubmit={onSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <p className="text-sm text-slate-700 sm:col-span-2">{k.attestationIntro}</p>
+      {error && (
+        <div className="sm:col-span-2">
+          <Alert>{error}</Alert>
+        </div>
+      )}
+      <Input
+        label={k.nameOnDocument}
+        error={errors.name_on_document?.message}
+        {...form.register('name_on_document')}
+      />
+      <Input
+        label={k.dobOrYob}
+        inputMode="numeric"
+        autoComplete="off"
+        hint={saved ? k.savedKeepBlank : undefined}
+        error={errors.dob_or_yob?.message}
+        {...form.register('dob_or_yob')}
+      />
+      <Input
+        label={k.idLast4}
+        hint={k.idLast4Hint}
+        inputMode="numeric"
+        maxLength={4}
+        autoComplete="off"
+        error={errors.id_last4?.message}
+        {...form.register('id_last4')}
+      />
+      <Select
+        label={k.signatureValid}
+        hint={k.signatureNotValidNote}
+        options={[
+          { value: 'yes', label: k.yes },
+          { value: 'no', label: k.no },
+        ]}
+        {...form.register('signature_valid')}
       />
       <div className="flex justify-end sm:col-span-2">
         <Button type="submit" variant="secondary" loading={isSubmitting}>

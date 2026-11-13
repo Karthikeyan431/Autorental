@@ -3,11 +3,14 @@
 Run in development with:  uvicorn app.main:create_app --factory --reload
 """
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import app.models  # noqa: F401  # register every model before any query runs
-from app.core.config import Settings, check_production_safety, get_settings
+from app.core.config import Settings, UnsafeConfigError, check_production_safety, get_settings
 from app.core.db import make_engine, make_sessionmaker
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
@@ -19,11 +22,27 @@ from app.modules.documents.router import router as documents_router
 from app.modules.drivers.router import router as drivers_router
 from app.modules.health.router import router as health_router
 from app.modules.kyc.router import router as kyc_router
+from app.modules.kyc.service import count_simulated_current_checks
 from app.modules.settings.router import router as settings_router
 from app.modules.users.router import router as users_router
 from app.version import __version__
 
 API_PREFIX = "/api/v1"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Hard constraint 6: production refuses to start while any current KYC check is
+    simulated (made with the demo method). Checked against the database at startup."""
+    if app.state.settings.is_production:
+        with app.state.sessionmaker() as session:
+            simulated = count_simulated_current_checks(session)
+        if simulated:
+            raise UnsafeConfigError(
+                f"Refusing to start: {simulated} current KYC check(s) are simulated (demo). "
+                "Reopen or redo them with a real method outside production first."
+            )
+    yield
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -39,6 +58,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url=f"{API_PREFIX}/openapi.json" if docs_enabled else None,
         docs_url=f"{API_PREFIX}/docs" if docs_enabled else None,
         redoc_url=None,
+        lifespan=lifespan,
     )
     app.state.settings = settings
     app.state.engine = make_engine(settings.DATABASE_URL)

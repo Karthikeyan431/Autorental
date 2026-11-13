@@ -117,6 +117,32 @@ class LicenceDetailsIn(BaseModel):
         return self
 
 
+class ParivahanLookupIn(LicenceDetailsIn):
+    """Licence method a (`parivahan_lookup`): what staff read on the official Parivahan page,
+    which they opened in a new tab. The server never calls that site. A screenshot upload
+    (`lookup_screenshot`) is required before submit; the lookup time may not be in the future."""
+
+    lookup_status_text: ShortText
+    looked_up_at: datetime
+
+
+class AttestationIn(BaseModel):
+    """Identity method b (`uidai_app_attested`, D47): what staff saw in UIDAI's own Aadhaar QR
+    Scanner app on their phone. Only the last 4 digits; the date or year of birth is masked
+    (blank keeps the saved value; the first save needs it)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name_on_document: ShortText
+    dob_or_yob: Annotated[str, Field(pattern=r"^[0-9]{4}(-[0-9]{2}-[0-9]{2})?$")] | None = None
+    id_last4: Annotated[str, Field(pattern=r"^[0-9]{4}$")]
+    gender: Annotated[NoAadhaarStr, Field(max_length=30)] | None = None
+    # "Signature shown as valid by the UIDAI app": kept as evidence either way (D49).
+    signature_valid: bool
+
+    _masked = field_validator("dob_or_yob", "gender", mode="before")(_blank_keeps)
+
+
 class LicenceDetailsOut(BaseModel):
     """The licence number shows only its last 4 characters; the date of birth is never returned.
     `masked_fields` names the masked values that are set (for "Show")."""
@@ -130,6 +156,9 @@ class LicenceDetailsOut(BaseModel):
     valid_until: date | None
     vehicle_classes: list[str]
     issuing_authority: str | None
+    # Parivahan lookup record only.
+    lookup_status_text: str | None
+    looked_up_at: datetime | None
 
 
 class ChecklistItem(BaseModel):
@@ -153,9 +182,14 @@ class AttemptOut(BaseModel):
     check_type: str
     attempt_no: int
     method: str
+    # Honest wording for the method ("Checked by staff with the UIDAI app"; never "Verified by
+    # system"). A simulated (demo) attempt says so.
+    method_label: str
     status: str
     is_current: bool
     is_simulated: bool
+    # Method results that are not personal data, e.g. uidai_app_signature_valid (D49).
+    evidence: dict[str, Any]
     submitted_at: datetime | None
     reviewed_by: UserRef | None
     reviewed_at: datetime | None
@@ -180,6 +214,8 @@ class DriverKycOut(BaseModel):
     consents: list[ConsentOut]
     has_kyc_consent: bool
     accepted_id_types: list[str]
+    # Methods a new attempt may use, per check type, from the flags (D47, D48).
+    available_methods: dict[str, list[str]]
     # What this user may do (D45, D46): the screens hide everything else.
     can_reveal: bool
     can_capture: bool

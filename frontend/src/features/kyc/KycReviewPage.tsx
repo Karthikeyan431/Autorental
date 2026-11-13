@@ -12,6 +12,7 @@ import {
   AttemptDocuments,
   AttemptHistory,
   DecisionPanel,
+  DemoBadge,
   StatusBadge,
 } from './components';
 
@@ -81,11 +82,7 @@ export default function KycReviewPage() {
         </h1>
         <div className="flex items-center gap-2 text-sm">
           {strings.drivers.attempt(data.attempt_no)} <StatusBadge status={data.status} />
-          {data.is_simulated && (
-            <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold">
-              {k.simulated}
-            </span>
-          )}
+          {data.is_simulated && <DemoBadge />}
         </div>
       </div>
       {driver.data && (

@@ -33,7 +33,7 @@ Conventions:
 | kyc_events | kyc_check_id, from_status, to_status, actor_id (NULL = a job), at, reason | Insert-only history |
 | identity_details | kyc_check_id, document_type (`masked_aadhaar` / `voter_id` / `passport`, N12), id_last4 (CHECK: exactly 4 digits), name_on_document, dob_or_yob, gender, qr_signature_valid (bool, nullable), photo_match_confirmed_by | **Never** a full Aadhaar number. No QR payload or address stored unless the legal adviser approves (N13) |
 | licence_details | kyc_check_id, driver_id, licence_number *(enc)*, licence_number_hash (keyed HMAC with `LOOKUP_HMAC_KEY`; one licence per driver: exclusion constraint on `(licence_number_hash =, driver_id <>)`, D37), licence_number_last4, name_on_licence, date_of_birth *(enc, ISO text; from Week 4, D46)*, issue_date, valid_until_non_transport, valid_until_transport, vehicle_classes (text[]), issuing_authority, lookup_status_text, looked_up_at, lookup_screenshot_document_id | Validity drives eligibility and alerts |
-| documents | owner_type, owner_id, doc_type, storage_key, sha256, mime_type, size_bytes, key_id, uploaded_by, uploaded_at, retention_until, purged_at | Encrypted files on disk outside the web root; served only through an authenticated, audited endpoint |
+| documents | owner_type, owner_id, doc_type (`driver_photo`, `id_front`, `id_back`, `licence_front`, `licence_back`; Week 4 adds `lookup_screenshot`, `attestation_screenshot`), storage_key, sha256, mime_type, size_bytes, key_id, uploaded_by, uploaded_at, retention_until, purged_at | Encrypted files on disk outside the web root; served only through an authenticated, audited endpoint |
 | document_access_log | document_id, user_id, at, ip, purpose (`view` / `download`) | Insert-only. Every view or download |
 
 ## Autos

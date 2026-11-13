@@ -56,8 +56,14 @@ class Settings(BaseSettings):
     DOCUMENTS_DIR: Path = REPO_DIR / "data" / "files"
     UIDAI_CERT_PATH: Path | None = None
 
-    # Feature flags. Both default to off (N13; hard constraint 6).
+    # Feature flags. All default to off (N13, D47, D48; hard constraint 6).
+    # The in-app Secure QR decoder is not built yet (D48): this flag offers nothing until it is.
     AADHAAR_QR_INAPP_ENABLED: bool = False
+    # UIDAI app attestation by staff (uidai_app_attested). Do not enable in production until the
+    # legal adviser answers N13.
+    AADHAAR_APP_ATTEST_ENABLED: bool = False
+    # The demo method (made-up details, marked simulated). Development and test only; production
+    # refuses to start with it on (check_production_safety) or with a simulated current check.
     DEMO_VERIFIER_ENABLED: bool = False
 
     # Sign-in throttle per IP address: this many failures within the window gives 429.

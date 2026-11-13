@@ -38,6 +38,8 @@ Until N13 is answered, identity is checked by manual review of the masked Aadhaa
 - Staff scan the driver's QR with UIDAI's free **Aadhaar QR Scanner** app on their own phone and compare the result with the person.
 - In our app they record: name, date or year of birth, last 4 digits, "signature shown as valid by the UIDAI app" (a yes or no attestation), and an optional screenshot with the number masked.
 - The label in the UI is **"Checked by staff with the UIDAI app"**, never "Verified by system".
+- No document is required. Checklist: the photo in the app matches the person; the name, date or year of birth and last 4 digits match the app; any screenshot shows only the last 4 digits.
+- If the app did not show the signature as valid, staff still record it: it is kept as evidence and approval is refused (`UIDAI_SIGNATURE_NOT_VALID`, D49), so they reject or ask for documents again.
 
 ### c) Manual (`manual`)
 
@@ -51,12 +53,18 @@ Until N13 is answered, identity is checked by manual review of the masked Aadhaa
 - A button opens the official Parivahan licence-status page in a new tab. **Do not** automate, scrape or call that site from our server.
 - Staff enter the licence number and date of birth there. In our form they record: licence status text, non-transport and transport validity dates, vehicle classes, issuing authority, the time of the lookup, and a screenshot upload.
 - The licence number is stored encrypted, with a hash for duplicate checks.
+- The screenshot (`lookup_screenshot`) is required before submit; the card photos are optional. Checklist: the photo on the licence matches the person; the Parivahan record matches the licence; the classes allow an auto-rickshaw; Parivahan shows it valid today; DigiLocker or mParivahan cross-check (optional). The validity dates recorded feed eligibility like any licence.
 
 ### b) Manual (`manual`)
 
 - Front and back uploads plus the same fields, typed from the card.
 
 The driver can also show the licence in their own DigiLocker or mParivahan app as a cross-check. Record that as a checklist item; it is not a separate method.
+
+### Demo (`demo`), development and test only
+
+- Offered only when `DEMO_VERIFIER_ENABLED=true` and `APP_ENV` is `development` or `test`; production refuses to start with the flag on, or while any current check is simulated.
+- Made-up details, no documents, the attempt is marked `is_simulated`, and a person still decides (Q25). Every screen shows a **"DEMO – not real"** badge, and eligibility in production would report `SIMULATED_VERIFICATION`.
 
 ## Statuses (per check, per attempt)
 

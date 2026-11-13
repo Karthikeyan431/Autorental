@@ -63,9 +63,10 @@ DEMO_DRIVERS: tuple[tuple[int, int, str | None, str | None, int], ...] = (
     (5, 0, "approved", "approved", 20),  # licence expiring soon
 )
 DEMO_NOTICE_VERSION = "demo-notice-v1"
+# The seed approves by manual review only.
 _TICKS = {
-    check_type: {item.key: True for item in items}
-    for check_type, items in kyc_service.CHECKLISTS.items()
+    check_type: {item.key: True for item in kyc_service.CHECKLISTS[(check_type, "manual")]}
+    for check_type in ("identity", "licence")
 }
 
 
@@ -151,7 +152,7 @@ def _seed_kyc_check(
     valid_days: int,
 ) -> None:
     attempt = kyc_service.start_attempt(
-        session, user, driver_id, check_type=check_type, method="manual", ip=None
+        session, settings, user, driver_id, check_type=check_type, method="manual", ip=None
     )
     if check_type == "identity":
         kyc_service.save_identity_details(
