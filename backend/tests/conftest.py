@@ -17,6 +17,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from sqlalchemy import Engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
@@ -24,6 +25,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.db import make_engine
 from app.main import create_app
+from tests.helpers import random_key_b64
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
@@ -36,7 +38,7 @@ def alembic_config(url: str) -> Config:
 
 
 @pytest.fixture(scope="session")
-def test_settings() -> Settings:
+def test_settings(tmp_path_factory: pytest.TempPathFactory) -> Settings:
     base = Settings()  # values come from backend/.env
     if not base.TEST_DATABASE_URL or not base.TEST_MIGRATION_DATABASE_URL:
         pytest.exit("TEST_DATABASE_URL is not set. Run scripts\\db-setup.ps1 first.", returncode=2)
@@ -44,11 +46,18 @@ def test_settings() -> Settings:
         database = make_url(url).database or ""
         if not database.endswith("_test"):
             pytest.exit(f"Refusing to run tests against database {database!r}.", returncode=2)
+    # Documents go to a throwaway folder, encrypted with keys made for this run, so the tests
+    # never write into the developer's data folder and never depend on its keys.
     return base.model_copy(
         update={
             "APP_ENV": "test",
             "DATABASE_URL": base.TEST_DATABASE_URL,
             "MIGRATION_DATABASE_URL": base.TEST_MIGRATION_DATABASE_URL,
+            "DOCUMENTS_DIR": tmp_path_factory.mktemp("documents"),
+            "FILE_ENCRYPTION_KEYS": SecretStr(f"t1:{random_key_b64()}"),
+            "ACTIVE_FILE_KEY_ID": "t1",
+            "LOOKUP_HMAC_KEY": SecretStr(random_key_b64()),
+            "DEV_INSECURE_COOKIES": False,
         }
     )
 
@@ -103,15 +112,18 @@ def client(test_settings: Settings, migrated_db: None) -> Iterator[TestClient]:
         yield test_client
 
 
-TRUNCATE_SQL = text(
-    "TRUNCATE recovery_codes, sessions, user_permissions, login_attempts, audit_logs, "
-    "settings_versions, users RESTART IDENTITY CASCADE"
+TABLES_SQL = text(
+    "SELECT tablename FROM pg_tables WHERE schemaname = 'public' "
+    "AND tablename <> 'alembic_version' ORDER BY tablename"
 )
 
 
 def _truncate(engine: Engine) -> None:
+    """Empty every table (each new week's tables included) and restart owned sequences."""
     with engine.begin() as connection:
-        connection.execute(TRUNCATE_SQL)
+        tables = [row[0] for row in connection.execute(TABLES_SQL)]
+        quoted = ", ".join(f'"{name}"' for name in tables)
+        connection.execute(text(f"TRUNCATE {quoted} RESTART IDENTITY CASCADE"))
 
 
 @pytest.fixture

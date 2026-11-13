@@ -1,11 +1,13 @@
 """Auth endpoints. The refresh token travels only in an httpOnly, Secure, SameSite=Strict cookie
-scoped to /api/v1/auth; a readable `arms_csrf` cookie is echoed in X-CSRF-Token on refresh."""
+scoped to /api/v1/auth; a readable `arms_csrf` cookie is echoed in X-CSRF-Token on refresh.
+(Secure is dropped only in development with DEV_INSECURE_COOKIES, for phone testing on the LAN.)"""
 
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings
 from app.core.db import get_session
 from app.core.permissions import CurrentUser, authenticated, public
 from app.core.request_context import client_ip, user_agent
@@ -38,14 +40,22 @@ def _client(request: Request) -> service.Client:
     return service.Client(ip=client_ip(request), user_agent=user_agent(request))
 
 
-def _set_cookies(response: Response, result: service.SignInResult) -> None:
+def _secure_cookies(request: Request) -> bool:
+    """Always Secure, except in development with DEV_INSECURE_COOKIES (phone testing over plain
+    http on the LAN). create_app refuses that setting in every other environment."""
+    settings: Settings = request.app.state.settings
+    return not (settings.APP_ENV == "development" and settings.DEV_INSECURE_COOKIES)
+
+
+def _set_cookies(request: Request, response: Response, result: service.SignInResult) -> None:
     max_age = int(REFRESH_TOKEN_TTL.total_seconds())
+    secure = _secure_cookies(request)
     response.set_cookie(
         REFRESH_COOKIE,
         result.refresh_token,
         max_age=max_age,
         path=REFRESH_COOKIE_PATH,
-        secure=True,
+        secure=secure,
         httponly=True,
         samesite="strict",
     )
@@ -54,21 +64,22 @@ def _set_cookies(response: Response, result: service.SignInResult) -> None:
         result.csrf_token,
         max_age=max_age,
         path="/",
-        secure=True,
+        secure=secure,
         httponly=False,
         samesite="strict",
     )
 
 
-def _clear_cookies(response: Response) -> None:
+def _clear_cookies(request: Request, response: Response) -> None:
+    secure = _secure_cookies(request)
     response.delete_cookie(
-        REFRESH_COOKIE, path=REFRESH_COOKIE_PATH, secure=True, httponly=True, samesite="strict"
+        REFRESH_COOKIE, path=REFRESH_COOKIE_PATH, secure=secure, httponly=True, samesite="strict"
     )
-    response.delete_cookie(CSRF_COOKIE, path="/", secure=True, samesite="strict")
+    response.delete_cookie(CSRF_COOKIE, path="/", secure=secure, samesite="strict")
 
 
-def _signed_in(response: Response, result: service.SignInResult) -> SignedIn:
-    _set_cookies(response, result)
+def _signed_in(request: Request, response: Response, result: service.SignInResult) -> SignedIn:
+    _set_cookies(request, response, result)
     return SignedIn(
         access_token=result.access_token, expires_in=result.expires_in, user=result.user
     )
@@ -87,7 +98,7 @@ def login(
     )
     if isinstance(result, service.ChallengeResult):
         return ChallengeOut(status=result.status, challenge_token=result.challenge_token)  # type: ignore[arg-type]
-    return _signed_in(response, result)
+    return _signed_in(request, response, result)
 
 
 @router.post("/totp", response_model=SignedIn)
@@ -102,7 +113,7 @@ def totp(
         recovery_code=body.recovery_code,
         client=_client(request),
     )
-    return _signed_in(response, result)
+    return _signed_in(request, response, result)
 
 
 @router.post("/totp/setup", response_model=TotpSetupOut)
@@ -124,7 +135,7 @@ def totp_confirm(
         code=body.code,
         client=_client(request),
     )
-    _set_cookies(response, result)
+    _set_cookies(request, response, result)
     return EnrolledOut(
         access_token=result.access_token,
         expires_in=result.expires_in,
@@ -143,7 +154,7 @@ def refresh(request: Request, response: Response, session: DbSession, _: Public)
         csrf_header=request.headers.get(CSRF_HEADER),
         client=_client(request),
     )
-    return _signed_in(response, result)
+    return _signed_in(request, response, result)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -154,7 +165,7 @@ def logout(
 ) -> Response:
     service.logout(session, user, _client(request))
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
-    _clear_cookies(response)
+    _clear_cookies(request, response)
     return response
 
 

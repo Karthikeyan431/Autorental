@@ -36,6 +36,7 @@ opentelemetry-api==1.45.2
 packageurl-python==0.17.6
 packaging==26.3
 pathspec==1.1.1
+pillow==13.0.0
 pip-requirements-parser==32.0.1
 pip_api==0.0.35
 pip_audit==2.10.1
@@ -54,6 +55,7 @@ PyOTP==2.10.0
 pyparsing==3.3.3
 pytest==9.2.0
 python-dotenv==1.2.4
+python-multipart==0.0.33
 qrcode==8.2
 requests==2.34.2
 rich==15.0.0

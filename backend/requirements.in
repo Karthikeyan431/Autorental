@@ -14,3 +14,6 @@ pyjwt==2.15.1
 pyotp==2.10.0
 cryptography==50.0.2
 qrcode==8.2
+# Week 3 (confirmed against PyPI on 2026-11-13)
+pillow==13.0.0
+python-multipart==0.0.33

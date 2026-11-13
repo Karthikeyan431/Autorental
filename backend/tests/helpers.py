@@ -2,6 +2,8 @@
 
 import base64
 import secrets
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from app.core.config import Settings
@@ -23,6 +25,9 @@ def make_settings(**overrides: Any) -> Settings:
         "FIELD_ENCRYPTION_KEY": random_key_b64(),
         "FILE_ENCRYPTION_KEYS": f"k1:{random_key_b64()}",
         "ACTIVE_FILE_KEY_ID": "k1",
+        "LOOKUP_HMAC_KEY": random_key_b64(),
+        # Never the developer's data folder.
+        "DOCUMENTS_DIR": Path(tempfile.gettempdir()) / "arms-test-documents",
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)

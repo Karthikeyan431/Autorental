@@ -86,6 +86,41 @@ def test_env_example_contains_no_real_values() -> None:
     text = (BACKEND_DIR / ".env.example").read_text(encoding="utf-8")
     for line in text.splitlines():
         if line.startswith(
-            ("SECRET_KEY=", "FIELD_ENCRYPTION_KEY=", "FILE_ENCRYPTION_KEYS=", "SEED_DEV_PASSWORD=")
+            (
+                "SECRET_KEY=",
+                "FIELD_ENCRYPTION_KEY=",
+                "FILE_ENCRYPTION_KEYS=",
+                "LOOKUP_HMAC_KEY=",
+                "SEED_DEV_PASSWORD=",
+            )
         ):
             assert line.split("=", 1)[1].strip() in {"", "change-me"}
+
+
+# --- Week 3: licence lookup key and the LAN development cookies -----------------------------------
+
+
+@pytest.mark.parametrize("value", ["", "change-me", "bm90LTMyLWJ5dGVz"])
+def test_production_refuses_a_missing_or_weak_lookup_key(value: str) -> None:
+    settings = make_settings(APP_ENV="production", LOOKUP_HMAC_KEY=value)
+    with pytest.raises(UnsafeConfigError, match="LOOKUP_HMAC_KEY"):
+        check_production_safety(settings)
+
+
+def test_insecure_dev_cookies_default_to_off() -> None:
+    assert make_settings().DEV_INSECURE_COOKIES is False
+
+
+def test_production_refuses_insecure_dev_cookies() -> None:
+    settings = make_settings(APP_ENV="production", DEV_INSECURE_COOKIES=True)
+    with pytest.raises(UnsafeConfigError, match="DEV_INSECURE_COOKIES"):
+        create_app(settings)
+
+
+def test_insecure_dev_cookies_are_refused_outside_development() -> None:
+    with pytest.raises(UnsafeConfigError, match="DEV_INSECURE_COOKIES"):
+        create_app(make_settings(APP_ENV="test", DEV_INSECURE_COOKIES=True))
+
+
+def test_development_allows_insecure_dev_cookies() -> None:
+    create_app(make_settings(APP_ENV="development", DEV_INSECURE_COOKIES=True))

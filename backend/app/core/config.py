@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     FIELD_ENCRYPTION_KEY_ID: str = "f1"  # stored with each encrypted value, for rotation
     FILE_ENCRYPTION_KEYS: SecretStr = SecretStr("")  # "key_id:base64,key_id:base64"
     ACTIVE_FILE_KEY_ID: str = ""
+    # HMAC key for licence-number duplicate checks (base64 of 32 bytes). Never rotate it: the
+    # stored hashes depend on it, so losing or changing it breaks duplicate detection.
+    LOOKUP_HMAC_KEY: SecretStr = SecretStr("")
 
     DOCUMENTS_DIR: Path = REPO_DIR / "data" / "files"
     UIDAI_CERT_PATH: Path | None = None
@@ -63,6 +66,10 @@ class Settings(BaseSettings):
 
     # Development seed only: the password for the fake owner and staff. Never committed.
     SEED_DEV_PASSWORD: SecretStr = SecretStr("")
+
+    # Development only (phone testing over the home Wi-Fi with plain http): drop the Secure
+    # flag on the refresh and CSRF cookies. Refused unless APP_ENV=development.
+    DEV_INSECURE_COOKIES: bool = False
 
     CORS_ORIGIN: str = ""
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
@@ -86,6 +93,10 @@ def _is_key(value: str) -> bool:
 
 def check_production_safety(settings: Settings) -> None:
     """Raise UnsafeConfigError naming every unsafe setting (never their values)."""
+    if settings.DEV_INSECURE_COOKIES and settings.APP_ENV != "development":
+        raise UnsafeConfigError(
+            "Unsafe configuration: DEV_INSECURE_COOKIES is allowed only when APP_ENV=development"
+        )
     if not settings.is_production:
         return
     problems: list[str] = []
@@ -111,6 +122,10 @@ def check_production_safety(settings: Settings) -> None:
         problems.append("FILE_ENCRYPTION_KEYS must be key_id:base64-of-32-bytes entries")
     if settings.ACTIVE_FILE_KEY_ID not in file_keys:
         problems.append("ACTIVE_FILE_KEY_ID must name one of FILE_ENCRYPTION_KEYS")
+
+    lookup_key = settings.LOOKUP_HMAC_KEY.get_secret_value()
+    if _is_placeholder(lookup_key) or not _is_key(lookup_key):
+        problems.append("LOOKUP_HMAC_KEY must be base64 of 32 random bytes")
 
     if problems:
         raise UnsafeConfigError("Unsafe production configuration: " + "; ".join(problems))
