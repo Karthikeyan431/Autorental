@@ -18,6 +18,8 @@ Staff take each driver through these steps in one wizard. Identity and licence a
 
 ### a) UIDAI Secure QR, in the app (`uidai_qr`) — behind the flag `AADHAAR_QR_INAPP_ENABLED` (default `false`, N13)
 
+**Not built yet (D48):** this moves to a later milestone, after the legal adviser answers N13. Until then a new `uidai_qr` attempt is refused with `KYC_METHOD_NOT_AVAILABLE`.
+
 - The QR is on the Aadhaar letter, PVC card, e-Aadhaar and the mAadhaar app. UIDAI signs it digitally, and the signature is checked with UIDAI's published certificate. No call to UIDAI is needed.
 - **Front end:** scan with `@zxing/browser` from the camera, and send the scanned text to the backend over HTTPS. Never store it in the browser.
 - **Back end:** implement decoding and signature verification **exactly per UIDAI's "Secure QR Code" specification** (download it from uidai.gov.in; do not guess the byte layout). In outline:

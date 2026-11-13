@@ -101,7 +101,7 @@ Status codes:
 | `INVALID_LICENCE_NUMBER` | 422 | Not 6 to 20 letters and digits after removing spaces and dashes |
 | `MANAGER_NOT_AVAILABLE` / `SAME_MANAGER` | 409 | Change manager to an inactive or unknown user / the current manager |
 | `CONSENT_REQUIRED` | 409 | A KYC attempt before a `kyc` consent (or after it was withdrawn) |
-| `KYC_METHOD_NOT_AVAILABLE` | 409 | A method other than `manual` (Week 4 adds the others; a UIDAI method whose flag is off gives 404, D47) |
+| `KYC_METHOD_NOT_AVAILABLE` | 409 | A method other than `manual` (Week 4 adds `parivahan_lookup` and `uidai_app_attested`, whose endpoint gives 404 while its flag is off, D47; `uidai_qr` stays refused until it is built, D48) |
 | `KYC_ATTEMPT_OPEN` / `KYC_REOPEN_REQUIRED` | 409 | A new attempt while one is open / after approval or rejection (owner reopen only, D34) |
 | `ATTEMPT_NOT_EDITABLE` | 409 | Details or uploads on an attempt that is no longer a draft |
 | `KYC_INCOMPLETE` | 409 | Submit without details or a required document (`details.missing`) |
