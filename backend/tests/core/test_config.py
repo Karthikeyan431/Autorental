@@ -107,20 +107,8 @@ def test_production_refuses_a_missing_or_weak_lookup_key(value: str) -> None:
         check_production_safety(settings)
 
 
-def test_insecure_dev_cookies_default_to_off() -> None:
-    assert make_settings().DEV_INSECURE_COOKIES is False
-
-
-def test_production_refuses_insecure_dev_cookies() -> None:
-    settings = make_settings(APP_ENV="production", DEV_INSECURE_COOKIES=True)
-    with pytest.raises(UnsafeConfigError, match="DEV_INSECURE_COOKIES"):
-        create_app(settings)
-
-
-def test_insecure_dev_cookies_are_refused_outside_development() -> None:
-    with pytest.raises(UnsafeConfigError, match="DEV_INSECURE_COOKIES"):
-        create_app(make_settings(APP_ENV="test", DEV_INSECURE_COOKIES=True))
-
-
-def test_development_allows_insecure_dev_cookies() -> None:
-    create_app(make_settings(APP_ENV="development", DEV_INSECURE_COOKIES=True))
+def test_the_removed_insecure_cookie_setting_has_no_effect() -> None:
+    """DEV_INSECURE_COOKIES was removed (dev.ps1 -Lan now serves https); a leftover value in an
+    old .env is ignored rather than honoured."""
+    settings = make_settings(DEV_INSECURE_COOKIES=True)
+    assert not hasattr(settings, "DEV_INSECURE_COOKIES")

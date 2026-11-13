@@ -57,7 +57,6 @@ def test_settings(tmp_path_factory: pytest.TempPathFactory) -> Settings:
             "FILE_ENCRYPTION_KEYS": SecretStr(f"t1:{random_key_b64()}"),
             "ACTIVE_FILE_KEY_ID": "t1",
             "LOOKUP_HMAC_KEY": SecretStr(random_key_b64()),
-            "DEV_INSECURE_COOKIES": False,
         }
     )
 

@@ -7,12 +7,14 @@ Business rules raise `AppError` with a stable code (usually 409). Unexpected err
 """
 
 import logging
+from collections.abc import Sequence
 from enum import StrEnum
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
+from fastapi.exceptions import RequestValidationError, ResponseValidationError
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError as PydanticValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.request_context import REQUEST_ID_HEADER, get_request_id
@@ -95,16 +97,21 @@ async def _app_error(_request: Request, exc: Exception) -> JSONResponse:
     return error_response(exc.status_code, exc.code, exc.message, exc.details)
 
 
-async def _validation_error(_request: Request, exc: Exception) -> JSONResponse:
-    if not isinstance(exc, RequestValidationError):  # registered for this type only
-        raise exc
-    # Only where and why; never the submitted value, which may be personal data.
-    errors = [
+def safe_errors(errors: Sequence[Any]) -> list[dict[str, Any]]:
+    """Only where and why. Pydantic's "input" and "ctx" (and "url") are dropped everywhere:
+    they carry the submitted value, which may be personal data (hard constraint 5)."""
+    return [
         {"loc": list(err.get("loc", ())), "msg": err.get("msg", ""), "type": err.get("type", "")}
-        for err in exc.errors()
+        for err in errors
     ]
+
+
+async def _validation_error(_request: Request, exc: Exception) -> JSONResponse:
+    # FastAPI's request parsing, or a model validated inside a route or service.
+    if not isinstance(exc, (RequestValidationError, PydanticValidationError)):
+        raise exc
     code, message = _STATUS_CODES[422]
-    return error_response(422, code, message, {"errors": errors})
+    return error_response(422, code, message, {"errors": safe_errors(exc.errors())})
 
 
 async def _http_error(_request: Request, exc: Exception) -> JSONResponse:
@@ -115,6 +122,15 @@ async def _http_error(_request: Request, exc: Exception) -> JSONResponse:
 
 
 async def _unexpected_error(_request: Request, exc: Exception) -> JSONResponse:
+    if isinstance(exc, ResponseValidationError):
+        # Our own bug (a response that does not fit its model). Log where, never the value.
+        _log.error(
+            "response validation error",
+            extra={
+                "errors": [{"loc": e["loc"], "type": e["type"]} for e in safe_errors(exc.errors())]
+            },
+        )
+        return error_response(500, ErrorCode.INTERNAL_ERROR, _INTERNAL_MESSAGE)
     _log.error("unhandled error", exc_info=(type(exc), exc, exc.__traceback__))
     return error_response(500, ErrorCode.INTERNAL_ERROR, _INTERNAL_MESSAGE)
 
@@ -122,5 +138,6 @@ async def _unexpected_error(_request: Request, exc: Exception) -> JSONResponse:
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AppError, _app_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
+    app.add_exception_handler(PydanticValidationError, _validation_error)
     app.add_exception_handler(StarletteHTTPException, _http_error)
     app.add_exception_handler(Exception, _unexpected_error)

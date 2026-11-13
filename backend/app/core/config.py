@@ -67,10 +67,6 @@ class Settings(BaseSettings):
     # Development seed only: the password for the fake owner and staff. Never committed.
     SEED_DEV_PASSWORD: SecretStr = SecretStr("")
 
-    # Development only (phone testing over the home Wi-Fi with plain http): drop the Secure
-    # flag on the refresh and CSRF cookies. Refused unless APP_ENV=development.
-    DEV_INSECURE_COOKIES: bool = False
-
     CORS_ORIGIN: str = ""
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
@@ -93,10 +89,6 @@ def _is_key(value: str) -> bool:
 
 def check_production_safety(settings: Settings) -> None:
     """Raise UnsafeConfigError naming every unsafe setting (never their values)."""
-    if settings.DEV_INSECURE_COOKIES and settings.APP_ENV != "development":
-        raise UnsafeConfigError(
-            "Unsafe configuration: DEV_INSECURE_COOKIES is allowed only when APP_ENV=development"
-        )
     if not settings.is_production:
         return
     problems: list[str] = []

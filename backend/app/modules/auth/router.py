@@ -1,13 +1,12 @@
-"""Auth endpoints. The refresh token travels only in an httpOnly, Secure, SameSite=Strict cookie
+r"""Auth endpoints. The refresh token travels only in an httpOnly, Secure, SameSite=Strict cookie
 scoped to /api/v1/auth; a readable `arms_csrf` cookie is echoed in X-CSRF-Token on refresh.
-(Secure is dropped only in development with DEV_INSECURE_COOKIES, for phone testing on the LAN.)"""
+Both are always Secure, in every environment (phone testing uses https: scripts\dev.ps1 -Lan)."""
 
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.config import Settings
 from app.core.db import get_session
 from app.core.permissions import CurrentUser, authenticated, public
 from app.core.request_context import client_ip, user_agent
@@ -40,22 +39,14 @@ def _client(request: Request) -> service.Client:
     return service.Client(ip=client_ip(request), user_agent=user_agent(request))
 
 
-def _secure_cookies(request: Request) -> bool:
-    """Always Secure, except in development with DEV_INSECURE_COOKIES (phone testing over plain
-    http on the LAN). create_app refuses that setting in every other environment."""
-    settings: Settings = request.app.state.settings
-    return not (settings.APP_ENV == "development" and settings.DEV_INSECURE_COOKIES)
-
-
-def _set_cookies(request: Request, response: Response, result: service.SignInResult) -> None:
+def _set_cookies(response: Response, result: service.SignInResult) -> None:
     max_age = int(REFRESH_TOKEN_TTL.total_seconds())
-    secure = _secure_cookies(request)
     response.set_cookie(
         REFRESH_COOKIE,
         result.refresh_token,
         max_age=max_age,
         path=REFRESH_COOKIE_PATH,
-        secure=secure,
+        secure=True,
         httponly=True,
         samesite="strict",
     )
@@ -64,22 +55,21 @@ def _set_cookies(request: Request, response: Response, result: service.SignInRes
         result.csrf_token,
         max_age=max_age,
         path="/",
-        secure=secure,
+        secure=True,
         httponly=False,
         samesite="strict",
     )
 
 
-def _clear_cookies(request: Request, response: Response) -> None:
-    secure = _secure_cookies(request)
+def _clear_cookies(response: Response) -> None:
     response.delete_cookie(
-        REFRESH_COOKIE, path=REFRESH_COOKIE_PATH, secure=secure, httponly=True, samesite="strict"
+        REFRESH_COOKIE, path=REFRESH_COOKIE_PATH, secure=True, httponly=True, samesite="strict"
     )
-    response.delete_cookie(CSRF_COOKIE, path="/", secure=secure, samesite="strict")
+    response.delete_cookie(CSRF_COOKIE, path="/", secure=True, samesite="strict")
 
 
 def _signed_in(request: Request, response: Response, result: service.SignInResult) -> SignedIn:
-    _set_cookies(request, response, result)
+    _set_cookies(response, result)
     return SignedIn(
         access_token=result.access_token, expires_in=result.expires_in, user=result.user
     )
@@ -135,7 +125,7 @@ def totp_confirm(
         code=body.code,
         client=_client(request),
     )
-    _set_cookies(request, response, result)
+    _set_cookies(response, result)
     return EnrolledOut(
         access_token=result.access_token,
         expires_in=result.expires_in,
@@ -165,7 +155,7 @@ def logout(
 ) -> Response:
     service.logout(session, user, _client(request))
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
-    _clear_cookies(request, response)
+    _clear_cookies(response)
     return response
 
 
