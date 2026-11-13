@@ -11,6 +11,7 @@ export type SettingsValues = {
   advance_adjustments_enabled: boolean;
   refunds_enabled: boolean;
   staff_limit: number;
+  reveal_limit_per_hour: number;
   business_name: string | null;
   business_address: string | null;
   business_upi_id: string | null;

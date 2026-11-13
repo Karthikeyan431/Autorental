@@ -24,7 +24,9 @@ const text = (max: number, required?: string) => {
   );
 };
 
-const schema = z.object({
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+const baseSchema = z.object({
   full_name: text(120, t.nameRequired),
   mobile: z.string().trim().refine(mobileOk, t.mobileInvalid),
   alt_mobile: z
@@ -32,7 +34,7 @@ const schema = z.object({
     .trim()
     .refine((v) => v === '' || mobileOk(v), t.mobileInvalid),
   address: text(500, t.addressRequired),
-  date_of_birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, t.dobRequired),
+  date_of_birth: z.string().regex(DATE, t.dobRequired),
   emergency_name: text(120),
   emergency_mobile: z
     .string()
@@ -40,7 +42,12 @@ const schema = z.object({
     .refine((v) => v === '' || mobileOk(v), t.mobileInvalid),
   payment_rhythm: z.enum(['daily', 'weekly']),
 });
-type Form = z.infer<typeof schema>;
+// Editing: the masked fields are not pre-filled and blank keeps the current value (N17).
+const editSchema = baseSchema.extend({
+  address: text(500),
+  date_of_birth: z.string().refine((v) => v === '' || DATE.test(v), t.dobRequired),
+});
+type Form = z.infer<typeof baseSchema>;
 
 const local = (mobile: string | null) => (mobile ?? '').replace(/^\+91/, '');
 
@@ -57,14 +64,16 @@ export function DriverDetailsForm({
   onCancel?: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
+  // On edit, only the owner and the current manager may change the masked fields (N17).
+  const showMasked = driver === null || driver.can_reveal;
   const form = useForm<Form>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(driver ? editSchema : baseSchema),
     defaultValues: {
       full_name: driver?.full_name ?? '',
       mobile: local(driver?.mobile ?? null),
       alt_mobile: local(driver?.alt_mobile ?? null),
-      address: driver?.address ?? '',
-      date_of_birth: driver?.date_of_birth ?? '',
+      address: '',
+      date_of_birth: '',
       emergency_name: driver?.emergency_name ?? '',
       emergency_mobile: local(driver?.emergency_mobile ?? null),
       payment_rhythm: driver?.payment_rhythm ?? 'daily',
@@ -78,14 +87,23 @@ export function DriverDetailsForm({
       full_name: values.full_name,
       mobile: values.mobile,
       alt_mobile: values.alt_mobile || null,
-      address: values.address,
-      date_of_birth: values.date_of_birth,
+      address: values.address.trim() || null,
+      date_of_birth: values.date_of_birth || null,
       emergency_name: values.emergency_name || null,
       emergency_mobile: values.emergency_mobile || null,
       payment_rhythm: values.payment_rhythm,
     };
     try {
-      onSaved(driver ? await updateDriver(driver.id, input) : await createDriver(input));
+      if (driver) {
+        // Never send the masked fields when blank (keep) or when this user may not change them.
+        const { address, date_of_birth, ...rest } = input;
+        const changes: Partial<DriverInput> = { ...rest };
+        if (showMasked && address) changes.address = address;
+        if (showMasked && date_of_birth) changes.date_of_birth = date_of_birth;
+        onSaved(await updateDriver(driver.id, changes));
+      } else {
+        onSaved(await createDriver(input));
+      }
     } catch (e) {
       setError(errorMessage(e));
     }
@@ -116,15 +134,28 @@ export function DriverDetailsForm({
         error={errors.alt_mobile?.message}
         {...form.register('alt_mobile')}
       />
-      <Input
-        label={t.dateOfBirth}
-        type="date"
-        error={errors.date_of_birth?.message}
-        {...form.register('date_of_birth')}
-      />
-      <div className="sm:col-span-2">
-        <Input label={t.address} error={errors.address?.message} {...form.register('address')} />
-      </div>
+      {showMasked ? (
+        <>
+          <Input
+            label={t.dateOfBirth}
+            type="date"
+            hint={driver ? t.leaveBlank : undefined}
+            error={errors.date_of_birth?.message}
+            {...form.register('date_of_birth')}
+          />
+          <div className="sm:col-span-2">
+            <Input
+              label={t.address}
+              autoComplete="off"
+              hint={driver ? t.leaveBlank : undefined}
+              error={errors.address?.message}
+              {...form.register('address')}
+            />
+          </div>
+        </>
+      ) : (
+        <p className="text-xs text-slate-600 sm:col-span-2">{t.maskedEditOwnerOnly}</p>
+      )}
       <Input
         label={t.emergencyName}
         error={errors.emergency_name?.message}

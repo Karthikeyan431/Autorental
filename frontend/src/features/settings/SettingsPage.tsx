@@ -50,6 +50,7 @@ const schema = z.object({
   vehicle_alert_days: wholeNumber,
   escalation_suggest_after_days: wholeNumber,
   staff_limit: wholeNumber.refine((v) => Number(v) >= 1, t.atLeastOne),
+  reveal_limit_per_hour: wholeNumber.refine((v) => Number(v) >= 1, t.atLeastOne),
   advance_adjustments_enabled: z.boolean(),
   refunds_enabled: z.boolean(),
   permitted_licence_classes: z.string().max(500),
@@ -74,6 +75,7 @@ const EMPTY: Form = {
   vehicle_alert_days: '30',
   escalation_suggest_after_days: '1',
   staff_limit: '10',
+  reveal_limit_per_hour: '30',
   advance_adjustments_enabled: true,
   refunds_enabled: false,
   permitted_licence_classes: '',
@@ -96,6 +98,7 @@ function toForm(v: SettingsValues): Form {
     vehicle_alert_days: String(v.vehicle_alert_days),
     escalation_suggest_after_days: String(v.escalation_suggest_after_days),
     staff_limit: String(v.staff_limit),
+    reveal_limit_per_hour: String(v.reveal_limit_per_hour),
     advance_adjustments_enabled: v.advance_adjustments_enabled,
     refunds_enabled: v.refunds_enabled,
     permitted_licence_classes: v.permitted_licence_classes.join(', '),
@@ -119,6 +122,7 @@ function toValues(f: Form): Partial<SettingsValues> {
     vehicle_alert_days: Number(f.vehicle_alert_days),
     escalation_suggest_after_days: Number(f.escalation_suggest_after_days),
     staff_limit: Number(f.staff_limit),
+    reveal_limit_per_hour: Number(f.reveal_limit_per_hour),
     advance_adjustments_enabled: f.advance_adjustments_enabled,
     refunds_enabled: f.refunds_enabled,
     permitted_licence_classes: f.permitted_licence_classes
@@ -322,6 +326,12 @@ function SettingsForm({ current }: { current: SettingsVersion | null }) {
           inputMode="numeric"
           error={errors.staff_limit?.message}
           {...form.register('staff_limit')}
+        />
+        <Input
+          label={t.revealLimit}
+          inputMode="numeric"
+          error={errors.reveal_limit_per_hour?.message}
+          {...form.register('reveal_limit_per_hour')}
         />
         <div className="flex flex-col justify-center gap-2">
           <Checkbox

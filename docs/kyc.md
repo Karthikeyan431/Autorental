@@ -11,12 +11,14 @@ Staff take each driver through these steps in one wizard. Identity and licence a
 5. **Licence check:** one of the methods below.
 6. **Staff decision:** a checklist per check, then approve, reject (reason required), or ask for documents again (reason required). Staff can decide by default (N2); the owner can reopen. Approval needs every required checklist item ticked (`CHECKLIST_INCOMPLETE`). "Ask for documents again" (`resubmission_required`) lets staff start a new attempt; "Reject" is final and only an owner reopen changes it (D34).
 
-**Who sees KYC (D33):** the owner, the managing staff member and staff with `drivers.edit_any`. Everyone else gets 404 for KYC documents, details, consents, eligibility and decisions, and does not see the KYC parts of the activity timeline. The driver photo is visible to all staff. **From Week 4 (D46):** opening document images and deciding (approve, reject, ask for documents again) are for the owner and the current manager only; staff with `drivers.edit_any` keep the masked KYC status and details. If a manager is away, the owner changes the manager. Identity values are masked by default and revealed one field at a time by the owner or the current manager (D45).
+**Who sees KYC (D33):** the owner, the managing staff member and staff with `drivers.edit_any`. Everyone else gets 404 for KYC documents, details, consents, eligibility and decisions, and does not see the KYC parts of the activity timeline. The driver photo is visible to all staff. **From Week 4 (D46):** opening document images, capturing KYC (consent, attempts, details, uploads, submit; D49) and deciding (approve, reject, ask for documents again) are for the owner and the current manager only; staff with `drivers.edit_any` keep the masked KYC status and details. The staff member who registers a driver is its manager from the start. If a manager is away, the owner changes the manager. Identity values are masked by default and revealed one field at a time by the owner or the current manager (D45).
 7. **Eligibility** is recomputed. Drafts show what is still missing.
 
 ## Identity methods
 
 ### a) UIDAI Secure QR, in the app (`uidai_qr`) — behind the flag `AADHAAR_QR_INAPP_ENABLED` (default `false`, N13)
+
+**Not built yet (D48):** this moves to a later milestone, after the legal adviser answers N13. Until then a new `uidai_qr` attempt is refused with `KYC_METHOD_NOT_AVAILABLE`.
 
 - The QR is on the Aadhaar letter, PVC card, e-Aadhaar and the mAadhaar app. UIDAI signs it digitally, and the signature is checked with UIDAI's published certificate. No call to UIDAI is needed.
 - **Front end:** scan with `@zxing/browser` from the camera, and send the scanned text to the backend over HTTPS. Never store it in the browser.
@@ -36,6 +38,8 @@ Until N13 is answered, identity is checked by manual review of the masked Aadhaa
 - Staff scan the driver's QR with UIDAI's free **Aadhaar QR Scanner** app on their own phone and compare the result with the person.
 - In our app they record: name, date or year of birth, last 4 digits, "signature shown as valid by the UIDAI app" (a yes or no attestation), and an optional screenshot with the number masked.
 - The label in the UI is **"Checked by staff with the UIDAI app"**, never "Verified by system".
+- No document is required. Checklist: the photo in the app matches the person; the name, date or year of birth and last 4 digits match the app; any screenshot shows only the last 4 digits.
+- If the app did not show the signature as valid, staff still record it: it is kept as evidence and approval is refused (`UIDAI_SIGNATURE_NOT_VALID`, D49), so they reject or ask for documents again.
 
 ### c) Manual (`manual`)
 
@@ -49,12 +53,18 @@ Until N13 is answered, identity is checked by manual review of the masked Aadhaa
 - A button opens the official Parivahan licence-status page in a new tab. **Do not** automate, scrape or call that site from our server.
 - Staff enter the licence number and date of birth there. In our form they record: licence status text, non-transport and transport validity dates, vehicle classes, issuing authority, the time of the lookup, and a screenshot upload.
 - The licence number is stored encrypted, with a hash for duplicate checks.
+- The screenshot (`lookup_screenshot`) is required before submit; the card photos are optional. Checklist: the photo on the licence matches the person; the Parivahan record matches the licence; the classes allow an auto-rickshaw; Parivahan shows it valid today; DigiLocker or mParivahan cross-check (optional). The validity dates recorded feed eligibility like any licence.
 
 ### b) Manual (`manual`)
 
 - Front and back uploads plus the same fields, typed from the card.
 
 The driver can also show the licence in their own DigiLocker or mParivahan app as a cross-check. Record that as a checklist item; it is not a separate method.
+
+### Demo (`demo`), development and test only
+
+- Offered only when `DEMO_VERIFIER_ENABLED=true` and `APP_ENV` is `development` or `test`; production refuses to start with the flag on, or while any current check is simulated.
+- Made-up details, no documents, the attempt is marked `is_simulated`, and a person still decides (Q25). Every screen shows a **"DEMO – not real"** badge, and eligibility in production would report `SIMULATED_VERIFICATION`.
 
 ## Statuses (per check, per attempt)
 
@@ -84,7 +94,7 @@ def check_eligibility(driver, on_date) -> Eligibility:
 ## Alerts
 
 - Licence expiring within `licence_alert_days` (30) and on the expiry date: alert the owner and the manager; no automatic action (Q23). Week 3: the job `python -m app.jobs.run_all` raises `licence_expiring` and `licence_expired` alerts (deduplicated) and marks the check `expired`; they show in the KYC queue's Expiring tab and on the dashboard. Per-user notifications come in Week 7 (D35).
-- Vehicle papers expiring within `vehicle_alert_days`.
+- Vehicle papers expiring within `vehicle_alert_days` (insurance, fitness and permit, Q29): `vehicle_paper_expiring` and `vehicle_paper_expired` alerts, raised when a paper is saved and by `run_all` (Week 4).
 
 ## Documents (all KYC files, photos, screenshots, signed agreements, statements)
 

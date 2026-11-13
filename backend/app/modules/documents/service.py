@@ -19,7 +19,7 @@ from app.core.files import document_store, prepare_upload
 from app.core.permissions import CurrentUser
 from app.core.time import utc_now
 from app.modules.documents.models import Document, DocumentAccessLog
-from app.modules.drivers.access import can_see_kyc, not_found
+from app.modules.drivers.access import is_owner_or_manager, not_found
 from app.modules.drivers.models import Driver
 from app.modules.kyc.models import KycCheck
 
@@ -61,16 +61,21 @@ def document_driver(session: Session, document: Document) -> Driver | None:
 
 
 def get_visible_document(session: Session, user: CurrentUser, document_id: int) -> Document:
-    """The document if this user may see it, else 404 (never 403: docs/security.md)."""
+    """The document if this user may see it, else 404 (never 403: docs/security.md). Driver
+    photos and vehicle papers: every signed-in user (N1). KYC documents: the owner and the
+    current manager (D46)."""
     document = session.get(Document, document_id)
     if document is None or document.purged_at is not None:
         raise not_found()
+    if document.owner_type == "vehicle":
+        return document  # vehicle papers hold no personal data: every signed-in user
     driver = document_driver(session, document)
     if driver is None:
         raise not_found()
     if document.doc_type == "driver_photo":
         return document  # every signed-in user sees driver photos (N1)
-    if not can_see_kyc(user, driver):
+    # D46: KYC document images show masked values in full: owner and current manager only.
+    if not is_owner_or_manager(user, driver):
         raise not_found()
     return document
 

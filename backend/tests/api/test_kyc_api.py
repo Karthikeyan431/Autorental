@@ -215,7 +215,9 @@ def test_a_submitted_attempt_is_no_longer_editable(api: TestClient, team: Team) 
     assert error_code(upload(api, team.staff_a, attempt, "id_back")) == "ATTEMPT_NOT_EDITABLE"
 
 
-def test_only_manual_is_available_this_week(api: TestClient, team: Team) -> None:
+def test_uidai_qr_is_not_available_until_n13_is_answered(api: TestClient, team: Team) -> None:
+    """D48: the in-app Secure QR decoder is not built; Week 4 adds other methods (see
+    test_kyc_methods.py), but a new uidai_qr attempt is still refused."""
     driver = create_driver(api, team.staff_a)
     record_consent(api, team.staff_a, driver["id"])
     response = api.post(
@@ -367,7 +369,8 @@ def test_other_staff_get_404_for_kyc(api: TestClient, team: Team) -> None:
     )
     assert consent.status_code == 404
 
-    # The owner and staff with drivers.edit_any can see it.
+    # The owner and staff with drivers.edit_any can see it; from Week 4 only the owner and the
+    # current manager decide (D46), so edit_any staff get 403 KYC_DECIDE_NOT_ALLOWED.
     assert api.get(
         f"{API}/drivers/{driver['id']}/kyc", headers=bearer(team.owner.token)
     ).status_code == (200)
@@ -377,7 +380,10 @@ def test_other_staff_get_404_for_kyc(api: TestClient, team: Team) -> None:
         headers=bearer(team.owner.token),
     )
     assert api.get(f"{API}/drivers/{driver['id']}/kyc", headers=other).status_code == 200
-    assert decide(api, team.staff_b, attempt, checklist=IDENTITY_CHECKLIST).status_code == 200
+    refused = decide(api, team.staff_b, attempt, checklist=IDENTITY_CHECKLIST)
+    assert refused.status_code == 403
+    assert error_code(refused) == "KYC_DECIDE_NOT_ALLOWED"
+    assert decide(api, team.owner.token, attempt, checklist=IDENTITY_CHECKLIST).status_code == 200
 
 
 def test_a_new_manager_gains_kyc_access_and_the_old_one_loses_it(

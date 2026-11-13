@@ -5,6 +5,8 @@ import type { KycStatus, UserRef } from '../drivers/api';
 import type { PageOf } from '../staff/api';
 
 export type CheckType = 'identity' | 'licence';
+/** `uidai_qr` is never offered (D48); the server lists what a new attempt may use. */
+export type KycMethod = 'manual' | 'parivahan_lookup' | 'uidai_app_attested' | 'uidai_qr' | 'demo';
 export type IdDocumentType = 'masked_aadhaar' | 'voter_id' | 'passport';
 
 export type DocumentMeta = {
@@ -20,24 +22,28 @@ export type DocumentMeta = {
 
 export type ChecklistItem = { key: string; label: string; required: boolean };
 
+/** The date or year of birth and gender are never sent; `masked_fields` names those set (D45). */
 export type IdentityDetails = {
   document_type: IdDocumentType;
   id_last4: string;
   name_on_document: string | null;
-  dob_or_yob: string | null;
-  gender: string | null;
+  masked_fields: string[];
 };
 
+/** The licence number shows its last 4 only; the date of birth is never sent (D45). */
 export type LicenceDetails = {
   licence_number_masked: string;
   name_on_licence: string | null;
-  date_of_birth: string | null;
+  masked_fields: string[];
   issue_date: string | null;
   valid_until_non_transport: string | null;
   valid_until_transport: string | null;
   valid_until: string | null;
   vehicle_classes: string[];
   issuing_authority: string | null;
+  /** Parivahan lookup record only. */
+  lookup_status_text: string | null;
+  looked_up_at: string | null;
 };
 
 export type KycEvent = {
@@ -54,10 +60,14 @@ export type Attempt = {
   driver_id: number;
   check_type: CheckType;
   attempt_no: number;
-  method: string;
+  method: KycMethod;
+  /** Honest wording, e.g. "Checked by staff with the UIDAI app" (never "Verified by system"). */
+  method_label: string;
   status: KycStatus;
   is_current: boolean;
   is_simulated: boolean;
+  /** Method results that are not personal data, e.g. uidai_app_signature_valid. */
+  evidence: Record<string, unknown>;
   submitted_at: string | null;
   reviewed_by: UserRef | null;
   reviewed_at: string | null;
@@ -92,17 +102,24 @@ export type DriverKyc = {
   consents: Consent[];
   has_kyc_consent: boolean;
   accepted_id_types: IdDocumentType[];
+  available_methods: Record<CheckType, KycMethod[]>;
+  can_reveal: boolean;
+  can_capture: boolean;
+  can_decide: boolean;
+  can_view_documents: boolean;
 };
 
 export type IdentityInput = {
   document_type: IdDocumentType;
   id_last4: string;
   name_on_document: string;
-  dob_or_yob: string;
+  /** null keeps the saved value (N17). */
+  dob_or_yob: string | null;
 };
 
 export type LicenceInput = {
-  licence_number: string;
+  /** null keeps the saved value (N17). */
+  licence_number: string | null;
   name_on_licence: string;
   date_of_birth: string | null;
   issue_date: string | null;
@@ -111,6 +128,23 @@ export type LicenceInput = {
   vehicle_classes: string[];
   issuing_authority: string | null;
 };
+
+export type ParivahanLookupInput = LicenceInput & {
+  lookup_status_text: string;
+  /** ISO date-time of the lookup; never in the future. */
+  looked_up_at: string;
+};
+
+export type AttestationInput = {
+  name_on_document: string;
+  /** null keeps the saved value (N17). */
+  dob_or_yob: string | null;
+  id_last4: string;
+  signature_valid: boolean;
+};
+
+/** The official licence status page. Staff open it themselves; the server never calls it. */
+export const PARIVAHAN_DL_STATUS_URL = 'https://parivahan.gov.in/rcdlstatus/?pur_cd=101';
 
 export type Decision = 'approve' | 'reject' | 'resubmit';
 
@@ -152,10 +186,10 @@ export function recordConsent(driverId: number, method: 'in_person_signed' | 'in
   });
 }
 
-export function startAttempt(driverId: number, checkType: CheckType) {
+export function startAttempt(driverId: number, checkType: CheckType, method: KycMethod) {
   return apiFetch<Attempt>(`/api/v1/drivers/${driverId}/kyc/${checkType}/attempts`, {
     method: 'POST',
-    json: { method: 'manual' },
+    json: { method },
   });
 }
 
@@ -173,6 +207,20 @@ export function saveIdentity(attemptId: number, input: IdentityInput) {
 export function saveLicence(attemptId: number, input: LicenceInput) {
   return apiFetch<Attempt>(`/api/v1/kyc/attempts/${attemptId}/licence-details`, {
     method: 'PUT',
+    json: input,
+  });
+}
+
+export function saveParivahanLookup(attemptId: number, input: ParivahanLookupInput) {
+  return apiFetch<Attempt>(`/api/v1/kyc/attempts/${attemptId}/parivahan-lookup`, {
+    method: 'POST',
+    json: input,
+  });
+}
+
+export function saveAttestation(attemptId: number, input: AttestationInput) {
+  return apiFetch<Attempt>(`/api/v1/kyc/attempts/${attemptId}/uidai-app-attestation`, {
+    method: 'POST',
     json: input,
   });
 }

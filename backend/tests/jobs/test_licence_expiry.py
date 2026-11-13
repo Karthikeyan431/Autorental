@@ -29,8 +29,9 @@ def _driver_with_licence(
     driver = Driver(
         full_name=f"Test Driver {n:03d}",
         mobile=f"+9190000{n:05d}",
-        address="Test address",
-        date_of_birth=date(1990, 1, 1),
+        # Stored encrypted by the service (N15); this test never reads them.
+        address="test:not-decrypted-here",
+        date_of_birth="test:not-decrypted-here",
         created_by=staff.id,
         managed_by=staff.id,
     )

@@ -10,11 +10,22 @@
   Every step runs even if an earlier one fails, then a summary is printed.
   Exits 1 if any step failed. pip-audit and npm audit need internet access.
 
+.PARAMETER VitestWorkers
+  Most vitest workers to run at once. Default: the VITEST_MAX_WORKERS environment variable, or 2,
+  so the whole gate fits in an 8 GB laptop next to PostgreSQL. CI calls npm directly and keeps
+  vitest's own default.
+
 .EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check.ps1
+
+.EXAMPLE
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check.ps1 -VitestWorkers 4
 #>
 [CmdletBinding()]
-param()
+param(
+    [ValidateRange(1, 64)]
+    [int]$VitestWorkers = $(if ($env:VITEST_MAX_WORKERS) { [int]$env:VITEST_MAX_WORKERS } else { 2 })
+)
 
 $ErrorActionPreference = 'Continue'
 Set-StrictMode -Version Latest
@@ -75,7 +86,9 @@ Invoke-Step 'pip-audit' $backend {
 # --- Frontend -------------------------------------------------------------------------------
 Invoke-Step 'eslint' $frontend { & npm.cmd run -s lint }
 Invoke-Step 'tsc' $frontend { & npm.cmd run -s typecheck }
-Invoke-Step 'vitest' $frontend { & npm.cmd run -s test }
+Invoke-Step "vitest ($VitestWorkers workers)" $frontend {
+    & npm.cmd run -s test -- --maxWorkers=$VitestWorkers
+}
 Invoke-Step 'npm audit' $frontend { & npm.cmd audit }
 
 # --- Summary --------------------------------------------------------------------------------

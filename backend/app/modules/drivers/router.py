@@ -2,7 +2,7 @@
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.db import get_session
@@ -22,6 +22,8 @@ from app.modules.drivers.schemas import (
     OptionalReasonIn,
     RestrictionCreate,
     RestrictionOut,
+    RevealIn,
+    RevealOut,
     StatusChange,
     TimelineEntry,
     UserRef,
@@ -74,7 +76,9 @@ def list_drivers(
 def create_driver(
     body: DriverCreate, request: Request, session: DbSession, user: Creator
 ) -> DriverOut:
-    driver = service.create_driver(session, user, body, ip=client_ip(request))
+    driver = service.create_driver(
+        session, request.app.state.settings, user, body, ip=client_ip(request)
+    )
     return service.driver_out(session, user, driver)
 
 
@@ -93,8 +97,34 @@ def get_driver(driver_id: int, session: DbSession, user: SignedIn) -> DriverOut:
 def update_driver(
     driver_id: int, body: DriverUpdate, request: Request, session: DbSession, user: SignedIn
 ) -> DriverOut:
-    driver = service.update_driver(session, user, driver_id, body, ip=client_ip(request))
+    driver = service.update_driver(
+        session, request.app.state.settings, user, driver_id, body, ip=client_ip(request)
+    )
     return service.driver_out(session, user, driver)
+
+
+@router.post("/drivers/{driver_id}/reveal", response_model=RevealOut)
+def reveal_field(
+    driver_id: int,
+    body: RevealIn,
+    request: Request,
+    response: Response,
+    session: DbSession,
+    user: SignedIn,
+) -> RevealOut:
+    """One masked value for this view only (D45). POST, so it never sits in a URL or log."""
+    value = service.reveal_field(
+        session,
+        request.app.state.settings,
+        user,
+        driver_id,
+        field=body.field,
+        attempt_id=body.attempt_id,
+        ip=client_ip(request),
+    )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return RevealOut(field=body.field, value=value)
 
 
 @router.post("/drivers/{driver_id}/photo", response_model=DriverOut)

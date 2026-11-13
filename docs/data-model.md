@@ -6,7 +6,7 @@ Conventions:
 - Timestamps are `timestamptz` (UTC); rent dates are `date` (Asia/Kolkata calendar).
 - `created_at` on every table, and `updated_at` on every table that can be updated. Insert-only tables (`audit_logs`, `settings_versions`, `rent_charges`, `kyc_events`, `escalation_events`, `document_access_log`) have no `updated_at`. Status columns are `text` with `CHECK (status IN (...))`.
 - The KYC method `demo` exists only for `APP_ENV` `development` and `test` (see `kyc.md` and Week 4); it is not one of the rule 8 methods.
-- Personal fields marked *(enc)* are encrypted at application level (AES-256-GCM, key from env, `key_id` stored).
+- Personal fields marked *(enc)* are encrypted at application level (AES-256-GCM, key from env, `key_id` stored). The context binds each value to its table, column and row (`drivers.address:<driver id>`); the licence number and the licence date of birth are bound to the driver, so an owner reopen can copy them. Losing `FIELD_ENCRYPTION_KEY` makes these fields unreadable (`handover.md`).
 - Outstanding, overdue and balances are **never stored**; they are computed from charges, adjustments, allocations and payment status.
 
 ## Access and settings
@@ -17,7 +17,7 @@ Conventions:
 | user_permissions | user_id, permission_code, granted_by, granted_at | Owner-only codes cannot be granted (service check plus a CHECK list) |
 | sessions | user_id, refresh_token_hash, family_id, expires_at, revoked_at, ip, user_agent | Refresh rotation; reuse of an old token revokes the family |
 | audit_logs | occurred_at, actor_id, action, entity_type, entity_id, before, after (redacted JSON), reason, ip, request_id, prev_hash, hash | Insert-only. The app DB role gets INSERT and SELECT only. Hash chain over the canonical JSON of each row |
-| settings_versions | effective_from, rent_due_time, due_day_offset (Q9, default 0), licence_alert_days (30), vehicle_alert_days (30), permitted_licence_classes, accepted_id_types (N12, default `{masked_aadhaar}`), advance_adjustments_enabled, refunds_enabled (false), staff_limit (10), business_name, business_address, business_upi_id, upi_payee_name, whatsapp_template, pay_request_time (08:00), weekly_pay_day (ISO weekday 1–7, default 1 = Monday), escalation_suggest_after_days (1), weekly_mdr_warning_paise (200000), created_by | Never updated; each change inserts a version. "Current" = latest effective_from ≤ now |
+| settings_versions | effective_from, rent_due_time, due_day_offset (Q9, default 0), licence_alert_days (30), vehicle_alert_days (30), permitted_licence_classes, accepted_id_types (N12, default `{masked_aadhaar}`), advance_adjustments_enabled, refunds_enabled (false), staff_limit (10), business_name, business_address, business_upi_id, upi_payee_name, whatsapp_template, pay_request_time (08:00), weekly_pay_day (ISO weekday 1–7, default 1 = Monday), escalation_suggest_after_days (1), weekly_mdr_warning_paise (200000), reveal_limit_per_hour (30, N18; Week 4), created_by | Never updated; each change inserts a version. "Current" = latest effective_from ≤ now |
 | notifications | user_id, kind, entity_type, entity_id, message, created_at, read_at | In-app alerts |
 | push_subscriptions | user_id, endpoint (unique), p256dh, auth, created_at, revoked_at | Web Push |
 
@@ -25,24 +25,24 @@ Conventions:
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| drivers | code (unique, e.g. D0042, from `driver_code_seq` via `next_driver_code()`), full_name, mobile (unique, normalised +91), alt_mobile, address, date_of_birth, emergency_name, emergency_mobile, photo_document_id, account_status (`active` / `suspended` / `inactive`), status_reason, payment_rhythm (`daily` / `weekly`), created_by (immutable), managed_by, registered_at | `created_by` and `code` are set once; the trigger `drivers_immutable` refuses any change, for every role |
+| drivers | code (unique, e.g. D0042, from `driver_code_seq` via `next_driver_code()`), full_name, mobile (unique, normalised +91), alt_mobile, address *(enc)*, date_of_birth *(enc, ISO text; from Week 4, D46)*, emergency_name, emergency_mobile, photo_document_id, account_status (`active` / `suspended` / `inactive`), status_reason, payment_rhythm (`daily` / `weekly`), created_by (immutable), managed_by, registered_at | `created_by` and `code` are set once; the trigger `drivers_immutable` refuses any change, for every role |
 | driver_manager_history | driver_id, staff_id, from_at, to_at, changed_by, reason | One open row per driver (to_at IS NULL, partial unique) |
 | driver_restrictions | driver_id, reason, is_blocking, placed_by, placed_at, lifted_by, lifted_at, lift_reason | Eligibility condition 5 |
 | consents | driver_id, purpose (`kyc`, `aadhaar_qr`), notice_version, method (`in_person_signed`, `in_person_checkbox`), captured_by, captured_at, withdrawn_at, withdrawn_by, withdrawal_reason | Required before any KYC step |
 | kyc_checks | driver_id, check_type (`identity` / `licence`), attempt_no, method (`uidai_qr` / `uidai_app_attested` / `parivahan_lookup` / `manual` / `demo`), status (`draft` / `submitted` / `under_review` / `approved` / `rejected` / `resubmission_required` / `expired`), is_simulated, evidence (minimal JSON), review_checklist (JSON), submitted_at, reviewed_by, reviewed_at, decision_reason, is_current, reopened_from_id, created_by | One row per attempt; unique (driver_id, check_type, attempt_no); partial unique on (driver_id, check_type) where is_current. A reopen copies the details to the new attempt (D4, D37) |
 | kyc_events | kyc_check_id, from_status, to_status, actor_id (NULL = a job), at, reason | Insert-only history |
 | identity_details | kyc_check_id, document_type (`masked_aadhaar` / `voter_id` / `passport`, N12), id_last4 (CHECK: exactly 4 digits), name_on_document, dob_or_yob, gender, qr_signature_valid (bool, nullable), photo_match_confirmed_by | **Never** a full Aadhaar number. No QR payload or address stored unless the legal adviser approves (N13) |
-| licence_details | kyc_check_id, driver_id, licence_number *(enc)*, licence_number_hash (keyed HMAC with `LOOKUP_HMAC_KEY`; one licence per driver: exclusion constraint on `(licence_number_hash =, driver_id <>)`, D37), licence_number_last4, name_on_licence, date_of_birth, issue_date, valid_until_non_transport, valid_until_transport, vehicle_classes (text[]), issuing_authority, lookup_status_text, looked_up_at, lookup_screenshot_document_id | Validity drives eligibility and alerts |
-| documents | owner_type, owner_id, doc_type, storage_key, sha256, mime_type, size_bytes, key_id, uploaded_by, uploaded_at, retention_until, purged_at | Encrypted files on disk outside the web root; served only through an authenticated, audited endpoint |
+| licence_details | kyc_check_id, driver_id, licence_number *(enc)*, licence_number_hash (keyed HMAC with `LOOKUP_HMAC_KEY`; one licence per driver: exclusion constraint on `(licence_number_hash =, driver_id <>)`, D37), licence_number_last4, name_on_licence, date_of_birth *(enc, ISO text; from Week 4, D46)*, issue_date, valid_until_non_transport, valid_until_transport, vehicle_classes (text[]), issuing_authority, lookup_status_text, looked_up_at, lookup_screenshot_document_id | Validity drives eligibility and alerts |
+| documents | owner_type, owner_id, doc_type (`driver_photo`, `id_front`, `id_back`, `licence_front`, `licence_back`; Week 4 adds `lookup_screenshot`, `attestation_screenshot` and `vehicle_paper`; owner_type `driver` / `kyc_check` / `vehicle`), storage_key, sha256, mime_type, size_bytes, key_id, uploaded_by, uploaded_at, retention_until, purged_at | Encrypted files on disk outside the web root; served only through an authenticated, audited endpoint |
 | document_access_log | document_id, user_id, at, ip, purpose (`view` / `download`) | Insert-only. Every view or download |
 
 ## Autos
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| vehicles | registration_number (unique, normalised), make, model, year, fuel_type, status (`available` / `rented` / `maintenance` / `inactive`), notes | Only the agreements service sets `rented` and back. Ending an agreement sets `available` at once; the `[]` exclusion constraint and the eligibility check stop a new agreement starting on the return day (Q1), and the UI shows "available from <return day + 1>" |
-| vehicle_compliance | vehicle_id, kind (`insurance` / `fitness` / `permit` / `pollution`, Q29), number, valid_from, valid_until, document_id | Expiry alerts |
-| maintenance_records | vehicle_id, started_on, ended_on, description, cost_paise, recorded_by | |
+| vehicles | registration_number (unique, normalised: upper-case letters and digits, 4 to 12), make, model, year (1980 to 2100), fuel_type (`cng` / `lpg` / `petrol` / `diesel` / `electric`), status (`available` / `rented` / `maintenance` / `inactive`), notes, created_by | Only the agreements service sets `rented` and back. Ending an agreement sets `available` at once; the `[]` exclusion constraint and the eligibility check stop a new agreement starting on the return day (Q1), and the UI shows "available from <return day + 1>" |
+| vehicle_compliance | vehicle_id, kind (`insurance` / `fitness` / `permit` / `pollution`, Q29), number, valid_from, valid_until (valid_from <= valid_until), document_id, recorded_by | Every paper is kept; the latest `valid_until` of each kind is current. Insurance, fitness and permit raise `vehicle_paper_expiring` / `vehicle_paper_expired` alerts within `vehicle_alert_days` (Q29), on save and from the daily job; inactive autos are skipped |
+| maintenance_records | vehicle_id, started_on, ended_on (>= started_on), description, cost_paise (>= 0), recorded_by | |
 
 ## Agreements and rent
 

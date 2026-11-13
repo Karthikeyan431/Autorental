@@ -1,24 +1,22 @@
 # Week 4: Free government checks, and autos
 
-**Goal:** add the free government verification methods (UIDAI Secure QR and the Parivahan lookup record) alongside manual review, and build auto management. Both Aadhaar methods are built behind flags that are **off by default** until the legal adviser answers N13 (D47); meanwhile identity is checked by manual review of the masked Aadhaar and the licence by the Parivahan lookup record.
+**Goal:** mask identity fields with an audited reveal, encrypt the address and dates of birth, apply the document and KYC access rule, add UIDAI app attestation (behind its flag, **off by default** until the legal adviser answers N13, D47) and the Parivahan lookup record alongside manual review, guard the demo method, and build auto management. Meanwhile identity is checked by manual review of the masked Aadhaar and the licence by the Parivahan lookup record.
 
-**Read first:** `docs/kyc.md` (identity methods a and b, licence method a), `docs/data-model.md` (autos, identity and licence details), `docs/business-rules.md` (rules 8, 2), `docs/open-questions.md` (N13, Q25, Q29, N15 to N19), `docs/decisions.md` (D45 to D47), `docs/requirements.md` section 3 (masked identity fields).
+**Not this week (D48):** the in-app Secure QR decoder (`uidai_qr`). It moves to a later milestone, after the legal adviser answers N13.
+
+**Read first:** `docs/kyc.md` (identity method b, licence method a), `docs/data-model.md` (autos, identity and licence details), `docs/business-rules.md` (rules 8, 2), `docs/open-questions.md` (N13, Q25, Q29, N15 to N20), `docs/decisions.md` (D45 to D49), `docs/requirements.md` section 3 (masked identity fields).
 
 ## Build
 
 **UIDAI app attestation (`uidai_app_attested`), behind `AADHAAR_APP_ATTEST_ENABLED=false` (D47)**
 - A form for: name, date or year of birth, last 4 digits, "signature shown as valid in the UIDAI app" (yes or no), and an optional masked screenshot.
 - UI label: "Checked by staff with the UIDAI app".
-- Built the same way as in-app scanning: the flag is read at startup (add it to `config.py` and `.env.example`, default `false`); when it is off, the endpoint returns 404 and the UI hides the option. Until N13 is answered, identity is checked by manual review of the masked Aadhaar.
+- The flag is read at startup (add it to `config.py` and `.env.example`, default `false`); when it is off, the endpoint returns 404 and the UI hides the option. Until N13 is answered, identity is checked by manual review of the masked Aadhaar and the licence by the Parivahan lookup record.
+- `uidai_app_attested` is added to the N13 question for the legal adviser (D47); do not turn the flag on in production until N13 is answered.
 
-**UIDAI Secure QR in the app (`uidai_qr`), behind `AADHAAR_QR_INAPP_ENABLED=false`**
-- **Back end:**
-  - Decoder and RSA signature verifier implemented strictly from UIDAI's Secure QR Code specification. **Before writing the decoder, ask me to download the spec PDF and the UIDAI certificate from uidai.gov.in and put them in `docs/vendor/`; do not guess the format.**
-  - The certificate path comes from `UIDAI_CERT_PATH`.
-  - Return the extracted name, date or year of birth, gender, last 4 digits and the photo (in memory only) for the staff match.
-  - Store only the allowed fields (see `kyc.md`).
-- **Front end:** camera scanning with `@zxing/browser`; a staff match screen with the photo; a "Photo matches the person" confirmation.
-- The flag is read at startup; when it is off, the endpoint returns 404 and the UI hides the option.
+**UIDAI Secure QR in the app (`uidai_qr`): not built this week (D48)**
+- Keep the method in the database and schemas as it is (migration 0003, `METHODS`, the `Method` literal) and keep `AADHAAR_QR_INAPP_ENABLED=false`.
+- No decoder, signature verifier, camera scanning, spec PDF or UIDAI certificate download this week. A new `uidai_qr` attempt stays refused with 409 `KYC_METHOD_NOT_AVAILABLE`, and the UI does not offer it.
 
 **Parivahan lookup record (`parivahan_lookup`)**
 - An "Open Parivahan" button (new tab, official site).
@@ -57,6 +55,14 @@
   current manager only. Others get 404 for document content (as before) and 403
   `KYC_DECIDE_NOT_ALLOWED` for a decision; their KYC queue shows only drivers they manage. If a
   manager is away, the owner changes the manager.
+- **KYC capture (D49):** consent, attempts, details, uploads and submit are also for the owner
+  and the current manager only (others get 403 `DRIVER_NOT_EDITABLE`). The staff member who
+  registers a driver is its manager from the start, so the wizard works end to end.
+- **Audit and history (D49):** audit entries, `kyc_events`, the timeline and the Activity tab
+  never hold a masked value, only the field name.
+- **Error codes (D46, D47):** keep the names `KYC_DECIDE_NOT_ALLOWED` and `FIELD_NOT_EDITABLE`
+  (both 403); add them to the error table in `docs/api.md` with `REVEAL_NOT_ALLOWED` and
+  `REVEAL_RATE_LIMITED`.
 - **Aadhaar unchanged:** last 4 digits only; no field may hold a full Aadhaar number (the
   existing `NoAadhaarStr` checks stay on every free-text field). A document image showing a
   full number is refused at review (required checklist item, D41); there is no automatic
@@ -80,19 +86,15 @@
 
 ## Out of scope
 
-Agreements, rent and payments.
+Agreements, rent and payments. The in-app Secure QR decoder and signature verifier, camera scanning with `@zxing/browser`, the spec PDF and the UIDAI certificate download (D48; a later milestone, after N13 is answered).
 
 ## Tests to write first
 
-**Secure QR verifier**, with synthetic payloads in the spec format signed by a test key generated in the test:
-- a genuine payload passes;
-- changing any single byte fails;
-- the wrong certificate fails;
-- a truncated payload fails cleanly (no crash);
-- the stored record never contains more than the allowed fields (assert on the database row).
-- No real Aadhaar QR in fixtures (a test scans fixtures for 12-digit numbers).
-
-**Flags:** for each of `AADHAAR_QR_INAPP_ENABLED` and `AADHAAR_APP_ATTEST_ENABLED`: both default to `false`; with the flag off, its endpoint returns 404 and the UI hides the option; with it on, it works. With both off, a driver can still be approved by manual review plus the Parivahan lookup.
+**Flags and methods:**
+- `AADHAAR_APP_ATTEST_ENABLED` defaults to `false`; with it off, the attestation endpoint returns 404 and the UI hides the option; with it on, attestation completes an identity check.
+- `AADHAAR_QR_INAPP_ENABLED` defaults to `false`; a new `uidai_qr` attempt is refused with 409 `KYC_METHOD_NOT_AVAILABLE` (D48).
+- With both flags off, a driver can still be approved by manual review plus the Parivahan lookup.
+- No real Aadhaar data in fixtures (a test scans fixtures for 12-digit numbers).
 
 **Production guard:**
 - the app refuses to start with `APP_ENV=production` and the demo method on;
@@ -119,7 +121,8 @@ Agreements, rent and payments.
   edit the other fields and get 403 `FIELD_NOT_EDITABLE` for a masked one; a blank masked
   field keeps the current value;
 - the database row holds ciphertext for the address and both dates of birth (assert on the raw
-  row: the plain value is not in it), and the age check still works;
+  row: the plain value is not in it), and the date of birth must still be in the past (N20: no
+  minimum age; the valid licence is the age check);
 - the rate limit is the setting `reveal_limit_per_hour` (default 30).
 - Frontend: values are masked by default; "Show" appears only for the owner and the current
   manager; the revealed value disappears after leaving the screen.
@@ -132,7 +135,6 @@ Agreements, rent and payments.
 ## Done when
 
 - [ ] A driver can be approved by manual review of the masked Aadhaar plus a Parivahan lookup, with no paid service.
-- [ ] The in-app QR path works in development with test payloads, and is off by default.
 - [ ] UIDAI app attestation works in development with its flag on, and is off by default.
 - [ ] Autos can be registered, with paper expiry alerts.
 - [ ] Identity fields are masked by default; only the owner and the current manager can reveal

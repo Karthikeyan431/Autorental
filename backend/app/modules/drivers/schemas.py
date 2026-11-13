@@ -49,9 +49,19 @@ class DriverCreate(BaseModel):
         return value
 
 
+def _blank_keeps(value: Any) -> Any:
+    """Masked fields are not pre-filled in the edit form: blank means "keep the current value"
+    (N17), so an empty or whitespace-only value becomes None."""
+    if isinstance(value, str):
+        cleaned = " ".join(value.split())
+        return cleaned or None
+    return value
+
+
 class DriverUpdate(BaseModel):
     """The fields staff may change. `created_by`, `managed_by`, `code` and status are not here:
-    an attempt to send them is refused (422)."""
+    an attempt to send them is refused (422). The masked fields (address, date of birth) may be
+    sent only by the owner or the current manager; blank or null keeps the current value."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -64,7 +74,8 @@ class DriverUpdate(BaseModel):
     emergency_mobile: str | None = None
     payment_rhythm: PaymentRhythm | None = None
 
-    _clean = field_validator("full_name", "address", "emergency_name", mode="before")(_clean_text)
+    _clean = field_validator("full_name", "emergency_name", mode="before")(_clean_text)
+    _masked = field_validator("address", "date_of_birth", mode="before")(_blank_keeps)
     _mobiles = field_validator("mobile", "alt_mobile", "emergency_mobile", mode="before")(_mobile)
 
     @field_validator("date_of_birth")
@@ -86,8 +97,9 @@ class DriverOut(BaseModel):
     full_name: str
     mobile: str
     alt_mobile: str | None
-    address: str
-    date_of_birth: date
+    # The address and date of birth are never returned; "Show" uses POST /drivers/{id}/reveal.
+    masked_fields: list[str]
+    can_reveal: bool
     emergency_name: str | None
     emergency_mobile: str | None
     photo_document_id: int | None
@@ -163,6 +175,24 @@ class RestrictionOut(BaseModel):
     lifted_by: UserRef | None
     lifted_at: datetime | None
     lift_reason: str | None
+
+
+RevealField = Annotated[str, Field(min_length=1, max_length=40)]
+
+
+class RevealIn(BaseModel):
+    """One masked field. KYC fields come from the current attempt unless `attempt_id` names an
+    older attempt of the same driver. An unknown field gives 404 (not 422)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: RevealField
+    attempt_id: int | None = None
+
+
+class RevealOut(BaseModel):
+    field: str
+    value: str
 
 
 class TimelineEntry(BaseModel):

@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { CaptureInput } from '../../components/CaptureInput';
+import { MaskedValue } from '../../components/MaskedValue';
 import { SecureDocument } from '../../components/SecureDocument';
 import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
@@ -21,9 +22,12 @@ import type { KycStatus } from '../drivers/api';
 import {
   decideAttempt,
   fetchEligibility,
+  PARIVAHAN_DL_STATUS_URL,
   reopenAttempt,
+  saveAttestation,
   saveIdentity,
   saveLicence,
+  saveParivahanLookup,
   startAttempt,
   submitAttempt,
   uploadAttemptDocument,
@@ -31,6 +35,7 @@ import {
   type CheckType,
   type Decision,
   type IdDocumentType,
+  type KycMethod,
 } from './api';
 
 const k = strings.kyc;
@@ -59,11 +64,33 @@ export function StatusBadge({ status }: { status: KycStatus | null }) {
   );
 }
 
+/** Shown wherever a simulated (demo) check appears (D49). */
+export function DemoBadge() {
+  return (
+    <span
+      data-testid="demo-badge"
+      className="inline-block rounded border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-950"
+    >
+      {k.simulated}
+    </span>
+  );
+}
+
 // --- Documents -------------------------------------------------------------------------------------
 
-export function AttemptDocuments({ attempt }: { attempt: Attempt }) {
+export function AttemptDocuments({
+  attempt,
+  canView = true,
+}: {
+  attempt: Attempt;
+  /** Owner or current manager only (D46): the images show masked values in full. */
+  canView?: boolean;
+}) {
   if (attempt.documents.length === 0) {
     return <p className="text-sm text-slate-600">{k.noDocuments}</p>;
+  }
+  if (!canView) {
+    return <p className="text-sm text-slate-600">{k.documentsManagerOnly}</p>;
   }
   return (
     <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -94,27 +121,78 @@ function DetailRow({ label, value }: { label: string; value: string | null | und
   );
 }
 
-export function AttemptDetails({ attempt }: { attempt: Attempt }) {
+/** Details of one attempt. Masked values show "Show" for the owner and current manager (D45). */
+export function AttemptDetails({
+  attempt,
+  canReveal = false,
+}: {
+  attempt: Attempt;
+  canReveal?: boolean;
+}) {
   const idd = attempt.identity_details;
   const lic = attempt.licence_details;
+  // An older attempt is revealed by id; the current one by field alone.
+  const attemptId = attempt.is_current ? undefined : attempt.id;
+  const masked = (fields: string[], field: string) => fields.includes(field);
+  const signature = attempt.evidence.uidai_app_signature_valid;
   return (
     <dl>
+      <div className="flex justify-between gap-3 border-b border-slate-100 py-1 text-sm">
+        <dt className="text-slate-600">{k.method}</dt>
+        <dd className="flex flex-wrap items-center justify-end gap-2 text-right text-slate-900">
+          {attempt.method_label}
+          {attempt.is_simulated && <DemoBadge />}
+        </dd>
+      </div>
+      {typeof signature === 'boolean' && (
+        <DetailRow label={k.signatureValidLabel} value={signature ? k.yes : k.no} />
+      )}
       {idd && (
         <>
           <DetailRow label={k.documentType} value={k.idTypes[idd.document_type]} />
           <DetailRow label={k.idLast4} value={idd.id_last4} />
           <DetailRow label={k.nameOnDocument} value={idd.name_on_document} />
-          <DetailRow label={k.dobOrYob} value={idd.dob_or_yob} />
+          {masked(idd.masked_fields, 'id_dob_or_yob') && (
+            <MaskedValue
+              driverId={attempt.driver_id}
+              field="id_dob_or_yob"
+              label={k.dobOrYob}
+              canReveal={canReveal}
+              attemptId={attemptId}
+            />
+          )}
+          {masked(idd.masked_fields, 'id_gender') && (
+            <MaskedValue
+              driverId={attempt.driver_id}
+              field="id_gender"
+              label={k.gender}
+              canReveal={canReveal}
+              attemptId={attemptId}
+            />
+          )}
         </>
       )}
       {lic && (
         <>
-          <DetailRow label={k.licenceNumber} value={lic.licence_number_masked} />
-          <DetailRow label={k.nameOnLicence} value={lic.name_on_licence} />
-          <DetailRow
-            label={k.licenceDob}
-            value={lic.date_of_birth ? formatDate(lic.date_of_birth) : null}
+          <MaskedValue
+            driverId={attempt.driver_id}
+            field="licence_number"
+            label={k.licenceNumber}
+            canReveal={canReveal}
+            attemptId={attemptId}
+            masked={lic.licence_number_masked}
           />
+          <DetailRow label={k.nameOnLicence} value={lic.name_on_licence} />
+          {masked(lic.masked_fields, 'licence_date_of_birth') && (
+            <MaskedValue
+              driverId={attempt.driver_id}
+              field="licence_date_of_birth"
+              label={k.licenceDob}
+              canReveal={canReveal}
+              attemptId={attemptId}
+              format={formatDate}
+            />
+          )}
           <DetailRow
             label={k.validNonTransport}
             value={lic.valid_until_non_transport ? formatDate(lic.valid_until_non_transport) : null}
@@ -125,6 +203,12 @@ export function AttemptDetails({ attempt }: { attempt: Attempt }) {
           />
           <DetailRow label={k.vehicleClasses} value={lic.vehicle_classes.join(', ')} />
           <DetailRow label={k.issuingAuthority} value={lic.issuing_authority} />
+          {lic.lookup_status_text && (
+            <DetailRow label={k.lookupStatus} value={lic.lookup_status_text} />
+          )}
+          {lic.looked_up_at && (
+            <DetailRow label={k.lookedUpAt} value={formatDateTime(lic.looked_up_at)} />
+          )}
         </>
       )}
     </dl>
@@ -152,7 +236,8 @@ const identitySchema = z.object({
   document_type: z.enum(['masked_aadhaar', 'voter_id', 'passport']),
   id_last4: z.string().regex(/^\d{4}$/, k.idLast4Invalid),
   name_on_document: noFullNumber(z.string().trim().min(1, strings.drivers.nameRequired).max(200)),
-  dob_or_yob: z.string().regex(/^\d{4}(-\d{2}-\d{2})?$/, k.dobOrYobInvalid),
+  // Masked (D45): not pre-filled; blank keeps the saved value. The first save needs it.
+  dob_or_yob: z.string().regex(/^(\d{4}(-\d{2}-\d{2})?)?$/, k.dobOrYobInvalid),
 });
 type IdentityForm = z.infer<typeof identitySchema>;
 
@@ -160,7 +245,8 @@ const optionalDate = z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/);
 
 const licenceSchema = z
   .object({
-    licence_number: noFullNumber(z.string().trim().min(6).max(40)),
+    // Masked (D45): not pre-filled; blank keeps the saved number. The first save needs it.
+    licence_number: noFullNumber(z.string().trim().max(40)),
     name_on_licence: noFullNumber(z.string().trim().min(1, strings.drivers.nameRequired).max(200)),
     date_of_birth: optionalDate,
     issue_date: optionalDate,
@@ -168,6 +254,8 @@ const licenceSchema = z
     valid_until_transport: optionalDate,
     vehicle_classes: noFullNumber(z.string().trim().min(1, k.vehicleClassesRequired).max(300)),
     issuing_authority: noFullNumber(z.string().trim().max(200)),
+    lookup_status_text: noFullNumber(z.string().trim().max(200)),
+    looked_up_at: z.string(),
   })
   .refine((v) => v.valid_until_non_transport || v.valid_until_transport, {
     message: k.validityRequired,
@@ -175,26 +263,53 @@ const licenceSchema = z
   });
 type LicenceForm = z.infer<typeof licenceSchema>;
 
-const DOC_TYPES: Record<CheckType, { key: string; label: string }[]> = {
-  identity: [
+const attestationSchema = z.object({
+  name_on_document: noFullNumber(z.string().trim().min(1, strings.drivers.nameRequired).max(200)),
+  id_last4: z.string().regex(/^\d{4}$/, k.idLast4Invalid),
+  // Masked (D45): not pre-filled; blank keeps the saved value. The first save needs it.
+  dob_or_yob: z.string().regex(/^(\d{4}(-\d{2}-\d{2})?)?$/, k.dobOrYobInvalid),
+  signature_valid: z.enum(['yes', 'no']),
+});
+type AttestationForm = z.infer<typeof attestationSchema>;
+
+/** Uploads offered per method (the server enforces the same lists and the required ones). */
+const DOC_TYPES: Record<string, { key: string; label: string }[]> = {
+  'identity:manual': [
     { key: 'id_front', label: k.idFront },
     { key: 'id_back', label: k.idBack },
   ],
-  licence: [
+  'identity:uidai_app_attested': [
+    { key: 'attestation_screenshot', label: k.attestationScreenshot },
+  ],
+  'licence:manual': [
+    { key: 'licence_front', label: k.licenceFront },
+    { key: 'licence_back', label: k.licenceBack },
+  ],
+  'licence:parivahan_lookup': [
+    { key: 'lookup_screenshot', label: k.lookupScreenshot },
     { key: 'licence_front', label: k.licenceFront },
     { key: 'licence_back', label: k.licenceBack },
   ],
 };
 
+/** A local date-time for <input type="datetime-local">, e.g. 2026-11-13T10:30. */
+function localDateTime(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`;
+}
+
 /**
- * Capture one check by manual review: details, uploads and submit. Starts a draft attempt the
- * first time something is saved, so every step is kept on the server (a draft per step).
+ * Capture one check: choose the method, then details, uploads and submit. Starts a draft
+ * attempt the first time something is saved, so every step is kept on the server.
  */
 export function KycCheckEditor({
   driverId,
   checkType,
   attempt,
   acceptedIdTypes,
+  methods,
   defaultName,
   onChanged,
 }: {
@@ -202,6 +317,8 @@ export function KycCheckEditor({
   checkType: CheckType;
   attempt: Attempt | null;
   acceptedIdTypes: IdDocumentType[];
+  /** From the server (flags, D47, D48); `manual` is always first. */
+  methods: KycMethod[];
   defaultName: string;
   onChanged: () => Promise<unknown> | void;
 }) {
@@ -212,10 +329,13 @@ export function KycCheckEditor({
   const isDraft = attempt?.status === 'draft';
   const canStartNew =
     attempt === null || attempt.status === 'resubmission_required' || attempt.status === 'expired';
+  const [chosen, setChosen] = useState<KycMethod>(methods[0] ?? 'manual');
+  // A draft keeps its method; a new attempt uses the one chosen here.
+  const method: KycMethod = attempt && isDraft ? attempt.method : chosen;
 
   const ensureDraft = async (): Promise<number> => {
     if (attempt && isDraft) return attempt.id;
-    const created = await startAttempt(driverId, checkType);
+    const created = await startAttempt(driverId, checkType, method);
     return created.id;
   };
 
@@ -255,13 +375,16 @@ export function KycCheckEditor({
         <p className="flex items-center gap-2 text-sm">
           {strings.drivers.attempt(attempt.attempt_no)} <StatusBadge status={attempt.status} />
         </p>
-        <AttemptDetails attempt={attempt} />
+        {/* The editor is shown only to the owner or the current manager (D46). */}
+        <AttemptDetails attempt={attempt} canReveal />
         <AttemptDocuments attempt={attempt} />
       </div>
     );
   }
 
   const uploadedTypes = new Set(attempt && isDraft ? attempt.documents.map((d) => d.doc_type) : []);
+  const docs = DOC_TYPES[`${checkType}:${method}`] ?? [];
+  const draftAttempt = isDraft ? attempt : null;
   return (
     <div className="flex flex-col gap-4">
       {attempt && !isDraft && (
@@ -271,7 +394,67 @@ export function KycCheckEditor({
         </Alert>
       )}
       {error && <Alert>{error}</Alert>}
-      {checkType === 'identity' ? (
+      {!isDraft && methods.length > 1 && (
+        <Select
+          label={k.chooseMethod}
+          value={chosen}
+          options={methods.map((value) => ({ value, label: k.methodOptions[value] ?? value }))}
+          onChange={(event) => setChosen(event.target.value as KycMethod)}
+        />
+      )}
+      {isDraft && attempt && (
+        <p className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+          {k.method}: {attempt.method_label}
+          {attempt.is_simulated && <DemoBadge />}
+        </p>
+      )}
+      {method === 'demo' && (
+        <Alert tone="info">
+          <span className="flex flex-col gap-1">
+            <DemoBadge />
+            {k.demoWarning}
+          </span>
+        </Alert>
+      )}
+      {method === 'uidai_app_attested' ? (
+        <AttestationFormFields
+          attempt={draftAttempt}
+          defaultName={defaultName}
+          onSave={async (values) => {
+            const attemptId = await ensureDraft();
+            await saveAttestation(attemptId, values);
+            await onChanged();
+          }}
+        />
+      ) : method === 'parivahan_lookup' ? (
+        <>
+          <div className="flex flex-col gap-1">
+            <a
+              href={PARIVAHAN_DL_STATUS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex w-fit items-center rounded-md border border-teal-700 px-3 py-2 text-sm font-medium text-teal-800 hover:bg-teal-50"
+            >
+              {k.openParivahan}
+            </a>
+            <p className="text-xs text-slate-600">{k.parivahanHint}</p>
+          </div>
+          <LicenceFormFields
+            attempt={draftAttempt}
+            defaultName={defaultName}
+            lookup
+            onSave={async (values) => {
+              const attemptId = await ensureDraft();
+              await saveParivahanLookup(attemptId, {
+                ...values,
+                lookup_status_text: values.lookup_status_text ?? '',
+                looked_up_at: values.looked_up_at ?? '',
+              });
+              await onChanged();
+            }}
+          />
+        </>
+      ) : checkType === 'identity' ? (
         <IdentityFormFields
           attempt={isDraft ? attempt : null}
           acceptedIdTypes={acceptedIdTypes}
@@ -293,9 +476,11 @@ export function KycCheckEditor({
           }}
         />
       )}
-      {checkType === 'identity' && <Alert tone="info">{k.maskedWarning}</Alert>}
+      {checkType === 'identity' && method !== 'demo' && (
+        <Alert tone="info">{k.maskedWarning}</Alert>
+      )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {DOC_TYPES[checkType].map((doc) => (
+        {docs.map((doc) => (
           <CaptureInput
             key={doc.key}
             label={doc.label}
@@ -328,7 +513,7 @@ function IdentityFormFields({
   attempt: Attempt | null;
   acceptedIdTypes: IdDocumentType[];
   defaultName: string;
-  onSave: (values: IdentityForm) => Promise<void>;
+  onSave: (values: Parameters<typeof saveIdentity>[1]) => Promise<void>;
 }) {
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
@@ -339,14 +524,18 @@ function IdentityFormFields({
       document_type: saved?.document_type ?? acceptedIdTypes[0] ?? 'masked_aadhaar',
       id_last4: saved?.id_last4 ?? '',
       name_on_document: saved?.name_on_document ?? defaultName,
-      dob_or_yob: saved?.dob_or_yob ?? '',
+      dob_or_yob: '',
     },
   });
   const { errors, isSubmitting } = form.formState;
   const onSubmit = form.handleSubmit(async (values) => {
     setError(null);
+    if (!saved && !values.dob_or_yob) {
+      form.setError('dob_or_yob', { message: k.dobOrYobRequired });
+      return;
+    }
     try {
-      await onSave(values);
+      await onSave({ ...values, dob_or_yob: values.dob_or_yob || null });
       toast.show({ message: k.detailsSaved, tone: 'success' });
     } catch (e) {
       setError(errorMessage(e));
@@ -381,6 +570,8 @@ function IdentityFormFields({
       <Input
         label={k.dobOrYob}
         inputMode="numeric"
+        autoComplete="off"
+        hint={saved ? k.savedKeepBlank : undefined}
         error={errors.dob_or_yob?.message}
         {...form.register('dob_or_yob')}
       />
@@ -393,14 +584,22 @@ function IdentityFormFields({
   );
 }
 
+type LicenceValues = Parameters<typeof saveLicence>[1] & {
+  lookup_status_text?: string;
+  looked_up_at?: string;
+};
+
 function LicenceFormFields({
   attempt,
   defaultName,
+  lookup = false,
   onSave,
 }: {
   attempt: Attempt | null;
   defaultName: string;
-  onSave: (values: Parameters<typeof saveLicence>[1]) => Promise<void>;
+  /** The Parivahan lookup record: adds the status text and the lookup time. */
+  lookup?: boolean;
+  onSave: (values: LicenceValues) => Promise<void>;
 }) {
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
@@ -410,20 +609,43 @@ function LicenceFormFields({
     defaultValues: {
       licence_number: '',
       name_on_licence: saved?.name_on_licence ?? defaultName,
-      date_of_birth: saved?.date_of_birth ?? '',
+      date_of_birth: '',
       issue_date: saved?.issue_date ?? '',
       valid_until_non_transport: saved?.valid_until_non_transport ?? '',
       valid_until_transport: saved?.valid_until_transport ?? '',
       vehicle_classes: saved?.vehicle_classes.join(', ') ?? '',
       issuing_authority: saved?.issuing_authority ?? '',
+      lookup_status_text: saved?.lookup_status_text ?? '',
+      looked_up_at: saved?.looked_up_at
+        ? localDateTime(new Date(saved.looked_up_at))
+        : localDateTime(new Date()),
     },
   });
   const { errors, isSubmitting } = form.formState;
   const onSubmit = form.handleSubmit(async (values) => {
     setError(null);
+    if (!saved && values.licence_number.length < 6) {
+      form.setError('licence_number', { message: k.licenceNumberRequired });
+      return;
+    }
+    if (lookup && !values.lookup_status_text) {
+      form.setError('lookup_status_text', { message: k.lookupStatusRequired });
+      return;
+    }
+    if (lookup && !values.looked_up_at) {
+      form.setError('looked_up_at', { message: k.lookedUpAtRequired });
+      return;
+    }
     try {
       await onSave({
-        licence_number: values.licence_number,
+        ...(lookup
+          ? {
+              lookup_status_text: values.lookup_status_text,
+              // The browser's local time, sent with its offset as an ISO instant.
+              looked_up_at: new Date(values.looked_up_at).toISOString(),
+            }
+          : {}),
+        licence_number: values.licence_number || null,
         name_on_licence: values.name_on_licence,
         date_of_birth: values.date_of_birth || null,
         issue_date: values.issue_date || null,
@@ -449,7 +671,7 @@ function LicenceFormFields({
       )}
       <Input
         label={k.licenceNumber}
-        hint={saved ? saved.licence_number_masked : undefined}
+        hint={saved ? `${saved.licence_number_masked} · ${k.savedKeepBlank}` : undefined}
         autoComplete="off"
         autoCapitalize="characters"
         error={errors.licence_number?.message}
@@ -460,7 +682,12 @@ function LicenceFormFields({
         error={errors.name_on_licence?.message}
         {...form.register('name_on_licence')}
       />
-      <Input label={k.licenceDob} type="date" {...form.register('date_of_birth')} />
+      <Input
+        label={k.licenceDob}
+        type="date"
+        hint={saved?.masked_fields.includes('licence_date_of_birth') ? k.savedKeepBlank : undefined}
+        {...form.register('date_of_birth')}
+      />
       <Input label={k.issueDate} type="date" {...form.register('issue_date')} />
       <Input
         label={k.validNonTransport}
@@ -479,6 +706,110 @@ function LicenceFormFields({
         error={errors.issuing_authority?.message}
         {...form.register('issuing_authority')}
       />
+      {lookup && (
+        <>
+          <Input
+            label={k.lookupStatus}
+            error={errors.lookup_status_text?.message}
+            {...form.register('lookup_status_text')}
+          />
+          <Input
+            label={k.lookedUpAt}
+            type="datetime-local"
+            error={errors.looked_up_at?.message}
+            {...form.register('looked_up_at')}
+          />
+        </>
+      )}
+      <div className="flex justify-end sm:col-span-2">
+        <Button type="submit" variant="secondary" loading={isSubmitting}>
+          {k.saveDetails}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function AttestationFormFields({
+  attempt,
+  defaultName,
+  onSave,
+}: {
+  attempt: Attempt | null;
+  defaultName: string;
+  onSave: (values: Parameters<typeof saveAttestation>[1]) => Promise<void>;
+}) {
+  const toast = useToast();
+  const [error, setError] = useState<string | null>(null);
+  const saved = attempt?.identity_details;
+  const savedSignature = attempt?.evidence.uidai_app_signature_valid;
+  const form = useForm<AttestationForm>({
+    resolver: zodResolver(attestationSchema),
+    defaultValues: {
+      name_on_document: saved?.name_on_document ?? defaultName,
+      id_last4: saved?.id_last4 ?? '',
+      dob_or_yob: '',
+      signature_valid: savedSignature === false ? 'no' : 'yes',
+    },
+  });
+  const { errors, isSubmitting } = form.formState;
+  const onSubmit = form.handleSubmit(async (values) => {
+    setError(null);
+    if (!saved && !values.dob_or_yob) {
+      form.setError('dob_or_yob', { message: k.dobOrYobRequired });
+      return;
+    }
+    try {
+      await onSave({
+        name_on_document: values.name_on_document,
+        id_last4: values.id_last4,
+        dob_or_yob: values.dob_or_yob || null,
+        signature_valid: values.signature_valid === 'yes',
+      });
+      toast.show({ message: k.detailsSaved, tone: 'success' });
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  });
+  return (
+    <form noValidate onSubmit={onSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <p className="text-sm text-slate-700 sm:col-span-2">{k.attestationIntro}</p>
+      {error && (
+        <div className="sm:col-span-2">
+          <Alert>{error}</Alert>
+        </div>
+      )}
+      <Input
+        label={k.nameOnDocument}
+        error={errors.name_on_document?.message}
+        {...form.register('name_on_document')}
+      />
+      <Input
+        label={k.dobOrYob}
+        inputMode="numeric"
+        autoComplete="off"
+        hint={saved ? k.savedKeepBlank : undefined}
+        error={errors.dob_or_yob?.message}
+        {...form.register('dob_or_yob')}
+      />
+      <Input
+        label={k.idLast4}
+        hint={k.idLast4Hint}
+        inputMode="numeric"
+        maxLength={4}
+        autoComplete="off"
+        error={errors.id_last4?.message}
+        {...form.register('id_last4')}
+      />
+      <Select
+        label={k.signatureValid}
+        hint={k.signatureNotValidNote}
+        options={[
+          { value: 'yes', label: k.yes },
+          { value: 'no', label: k.no },
+        ]}
+        {...form.register('signature_valid')}
+      />
       <div className="flex justify-end sm:col-span-2">
         <Button type="submit" variant="secondary" loading={isSubmitting}>
           {k.saveDetails}
@@ -492,9 +823,12 @@ function LicenceFormFields({
 
 export function DecisionPanel({
   attempt,
+  canDecide,
   onChanged,
 }: {
   attempt: Attempt;
+  /** The owner or the driver's current manager (D46); kyc.decide is checked as well. */
+  canDecide: boolean;
   onChanged: () => Promise<unknown> | void;
 }) {
   const { user } = useAuth();
@@ -569,6 +903,14 @@ export function DecisionPanel({
 
   if (!can(user, 'kyc.decide')) {
     return <StatusBadge status={attempt.status} />;
+  }
+  if (!canDecide) {
+    return (
+      <div className="flex flex-col gap-1 text-sm">
+        <StatusBadge status={attempt.status} />
+        <p className="text-slate-600">{k.decideManagerOnly}</p>
+      </div>
+    );
   }
 
   return (

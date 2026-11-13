@@ -4,13 +4,12 @@
 trigger `drivers_guard_immutable` (migration 0003) refuses any UPDATE that tries.
 """
 
-from datetime import date, datetime
+from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
-    Date,
     DateTime,
     ForeignKey,
     Identity,
@@ -48,8 +47,9 @@ class Driver(TimestampMixin, Base):
     full_name: Mapped[str] = mapped_column(Text, nullable=False)
     mobile: Mapped[str] = mapped_column(Text, nullable=False, unique=True)  # +91XXXXXXXXXX
     alt_mobile: Mapped[str | None] = mapped_column(Text)
+    # Encrypted at rest (N15, D46): `<key_id>:<ciphertext>`; see app.modules.drivers.pii.
     address: Mapped[str] = mapped_column(Text, nullable=False)
-    date_of_birth: Mapped[date] = mapped_column(Date, nullable=False)
+    date_of_birth: Mapped[str] = mapped_column(Text, nullable=False)  # ISO date, encrypted
     emergency_name: Mapped[str | None] = mapped_column(Text)
     emergency_mobile: Mapped[str | None] = mapped_column(Text)
     photo_document_id: Mapped[int | None] = mapped_column(

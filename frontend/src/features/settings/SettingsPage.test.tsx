@@ -21,6 +21,7 @@ const version = {
   advance_adjustments_enabled: true,
   refunds_enabled: false,
   staff_limit: 10,
+  reveal_limit_per_hour: 30,
   business_name: 'Test Auto Rentals (DEMO)',
   business_address: null,
   business_upi_id: 'demo@upi',

@@ -20,10 +20,10 @@ from sqlalchemy import CHAR, BigInteger, DateTime, ForeignKey, Identity, Index, 
 from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
+from app.core import time as clock  # module attribute, so tests can move the clock
 from app.core.db import Base, CreatedAtMixin
 from app.core.redaction import redact
 from app.core.request_context import get_request_id
-from app.core.time import utc_now
 
 GENESIS_HASH = "0" * 64
 _AUDIT_LOCK_KEY = 7_204_211_001  # arbitrary constant shared by every writer
@@ -35,6 +35,7 @@ class AuditLog(CreatedAtMixin, Base):
         Index("ix_audit_logs_entity", "entity_type", "entity_id"),
         Index("ix_audit_logs_actor_id", "actor_id"),
         Index("ix_audit_logs_occurred_at", "occurred_at"),
+        Index("ix_audit_logs_actor_action_time", "actor_id", "action", "occurred_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
@@ -134,7 +135,7 @@ def write_audit(
     last_hash = session.scalar(select(AuditLog.hash).order_by(AuditLog.id.desc()).limit(1))
 
     fields = _hashed_fields(
-        occurred_at=(occurred_at or utc_now()).astimezone(UTC),
+        occurred_at=(occurred_at or clock.utc_now()).astimezone(UTC),
         actor_id=actor_id,
         action=action,
         entity_type=entity_type,

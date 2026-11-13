@@ -25,7 +25,7 @@ Autos, agreements, the daily rent ledger and reports carry over from the origina
 | --- | --- |
 | Automatic rent collection | A daily pay request: a UPI link and QR for the business UPI ID with the amount and a reference code. Staff send it on WhatsApp with one tap. |
 | Confirming payments | The owner uploads the bank statement (CSV or Excel). The system matches credits to pay requests; the owner approves in bulk. |
-| Identity check | UIDAI Secure QR: decode the QR and verify UIDAI's digital signature (in-app scanning behind a flag, N13), or staff use UIDAI's free Aadhaar QR Scanner app and record the result. |
+| Identity check | UIDAI Secure QR: decode the QR and verify UIDAI's digital signature in the app (flag `AADHAAR_QR_INAPP_ENABLED`), or staff use UIDAI's free Aadhaar QR Scanner app and record the result (flag `AADHAAR_APP_ATTEST_ENABLED`). Both flags default to off until the legal adviser answers N13 (D47), and the in-app decoder is built only after that (D48); until then identity is checked by manual review of the masked Aadhaar. |
 | Licence check | Staff look up the licence on the official Parivahan site and record the status, validity and vehicle classes with a screenshot. |
 | Messages to drivers | WhatsApp click-to-chat links (`https://wa.me/91XXXXXXXXXX?text=...`); staff tap Send. |
 | Alerts to owner and staff | In-app notifications and Web Push (VAPID). |
@@ -43,7 +43,7 @@ Owner-only actions cannot be granted to staff. "Grantable" means the owner can s
 | --- | --- | --- | --- |
 | Create, edit, deactivate staff; set permissions | Yes | No | Never |
 | Business settings: rent due time, business UPI ID and payee name, staff limit, WhatsApp template | Yes | No | Never |
-| Register a driver, take the photo, record consent, upload documents | Yes | Yes | n/a |
+| Register a driver, take the photo, record consent, upload documents. From Week 4: consent and KYC capture only for drivers they currently manage (D49) | Yes | Yes | n/a |
 | Verify identity and licence; approve, reject or ask again (N2). From Week 4: only for drivers they currently manage (N16) | Yes | Yes | n/a |
 | Reopen or overturn a verification | Yes | No | Never |
 | Change which staff member manages a driver | Yes | No | Never |

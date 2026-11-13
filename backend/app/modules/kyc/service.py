@@ -1,4 +1,10 @@
-"""KYC by manual review (docs/kyc.md; rules 7, 9, 12; decisions D33-D37).
+"""KYC checks (docs/kyc.md; rules 7, 8, 9, 12; decisions D33-D37, D45-D49).
+
+Methods (rule 8): `manual` (both checks), `parivahan_lookup` (licence: a record of what staff
+read on the official site, with a required screenshot; the server never calls the site),
+`uidai_app_attested` (identity, behind AADHAAR_APP_ATTEST_ENABLED, D47) and `demo`
+(development and test only, behind DEMO_VERIFIER_ENABLED; marked simulated, a person still
+decides, Q25). `uidai_qr` is not built (D48) and is never offered.
 
 Statuses per attempt: draft -> submitted -> (under_review) -> approved | rejected |
 resubmission_required; approved -> expired (licence job). Every change writes a `kyc_events` row
@@ -12,7 +18,12 @@ and an audit entry in the caller's transaction.
 * Approval needs every required checklist item ticked; the identity checklist includes "Only the
   last 4 digits of the Aadhaar number are visible".
 * Only the owner, the managing staff member and staff with drivers.edit_any see a driver's KYC;
-  everyone else gets 404 (app.modules.drivers.access).
+  everyone else gets 404. From Week 4 (D46), capture, documents and decisions are for the
+  owner and the current manager only (app.modules.drivers.access).
+* Masked values (licence number, dates of birth, gender) are never returned or audited; the
+  licence date of birth is encrypted at rest like the licence number (D45, D46).
+* An attestation recording "signature not valid" is kept as evidence and cannot be approved
+  (409 UIDAI_SIGNATURE_NOT_VALID, D49); staff reject or ask for documents again.
 """
 
 from datetime import date, timedelta
@@ -31,6 +42,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session
 
+from app.core import time as clock
 from app.core.audit import write_audit
 from app.core.config import Settings
 from app.core.crypto import field_cipher
@@ -42,11 +54,15 @@ from app.core.time import business_date, utc_now
 from app.modules.documents.models import Document
 from app.modules.documents.schemas import document_out
 from app.modules.documents.service import store_document
+from app.modules.drivers import pii
 from app.modules.drivers.access import (
+    can_capture_kyc,
+    can_decide_kyc,
+    is_owner_or_manager,
     not_found,
     require_kyc,
+    require_kyc_decide,
     require_kyc_edit,
-    sees_all_kyc,
 )
 from app.modules.drivers.models import Consent, Driver
 from app.modules.drivers.service import get_driver, user_refs
@@ -59,6 +75,7 @@ from app.modules.kyc.models import (
 )
 from app.modules.kyc.schemas import (
     AttemptOut,
+    AttestationIn,
     ChecklistItem,
     ConsentOut,
     DriverKycOut,
@@ -67,6 +84,7 @@ from app.modules.kyc.schemas import (
     KycEventOut,
     LicenceDetailsIn,
     LicenceDetailsOut,
+    ParivahanLookupIn,
     QueueCounts,
     QueueDriver,
     QueueItem,
@@ -76,40 +94,105 @@ from app.modules.settings.service import get_current_settings
 
 # --- Fixed lists ----------------------------------------------------------------------------------
 
-AVAILABLE_METHODS = {"manual"}  # Week 4 adds uidai_app_attested, uidai_qr, parivahan_lookup
-DOC_TYPES_BY_CHECK = {
-    "identity": ("id_front", "id_back"),
-    "licence": ("licence_front", "licence_back"),
+METHOD_LABELS = {
+    "manual": "Manual review of the documents",
+    "parivahan_lookup": "Looked up by staff on the Parivahan site",
+    "uidai_app_attested": "Checked by staff with the UIDAI app",
+    "uidai_qr": "UIDAI Secure QR in the app",
+    "demo": "DEMO – not real",  # noqa: RUF001  # the en dash is the agreed badge text (D49)
 }
-REQUIRED_DOCS = {"identity": ("id_front",), "licence": ("licence_front", "licence_back")}
 
-CHECKLISTS: dict[str, list[ChecklistItem]] = {
-    "identity": [
-        ChecklistItem(
-            key="last4_only_visible",
-            label="Only the last 4 digits of the Aadhaar number are visible",
-            required=True,
-        ),
+# Documents an attempt may carry, and those required before submit, per (check type, method).
+DOC_TYPES: dict[tuple[str, str], tuple[str, ...]] = {
+    ("identity", "manual"): ("id_front", "id_back"),
+    ("identity", "uidai_app_attested"): ("attestation_screenshot",),
+    ("identity", "demo"): (),
+    ("licence", "manual"): ("licence_front", "licence_back"),
+    # The card photos are optional: they help the "photo matches" item.
+    ("licence", "parivahan_lookup"): ("lookup_screenshot", "licence_front", "licence_back"),
+    ("licence", "demo"): (),
+}
+REQUIRED_DOCS: dict[tuple[str, str], tuple[str, ...]] = {
+    ("identity", "manual"): ("id_front",),
+    ("identity", "uidai_app_attested"): (),
+    ("identity", "demo"): (),
+    ("licence", "manual"): ("licence_front", "licence_back"),
+    ("licence", "parivahan_lookup"): ("lookup_screenshot",),
+    ("licence", "demo"): (),
+}
+
+_DIGILOCKER = ChecklistItem(
+    key="digilocker_cross_check",
+    label="Also seen in the driver's DigiLocker or mParivahan app (optional)",
+    required=False,
+)
+_MANUAL_IDENTITY = [
+    ChecklistItem(
+        key="last4_only_visible",
+        label="Only the last 4 digits of the Aadhaar number are visible",
+        required=True,
+    ),
+    ChecklistItem(
+        key="photo_matches_person",
+        label="The photo matches the person in front of you",
+        required=True,
+    ),
+    ChecklistItem(
+        key="details_match_document",
+        label="The typed name, date of birth and last 4 digits match the document",
+        required=True,
+    ),
+]
+_MANUAL_LICENCE = [
+    ChecklistItem(
+        key="photo_matches_person",
+        label="The photo on the licence matches the person in front of you",
+        required=True,
+    ),
+    ChecklistItem(
+        key="details_match_card",
+        label="The typed details match the front and back of the card",
+        required=True,
+    ),
+    ChecklistItem(
+        key="classes_permitted",
+        label="The vehicle classes allow driving an auto-rickshaw",
+        required=True,
+    ),
+    ChecklistItem(key="valid_today", label="The licence is valid today", required=True),
+    _DIGILOCKER,
+]
+CHECKLISTS: dict[tuple[str, str], list[ChecklistItem]] = {
+    ("identity", "manual"): _MANUAL_IDENTITY,
+    ("identity", "demo"): _MANUAL_IDENTITY,
+    ("identity", "uidai_app_attested"): [
         ChecklistItem(
             key="photo_matches_person",
-            label="The photo matches the person in front of you",
+            label="The photo in the UIDAI app matches the person in front of you",
             required=True,
         ),
         ChecklistItem(
-            key="details_match_document",
-            label="The typed name, date of birth and last 4 digits match the document",
+            key="app_result_matches",
+            label="The name, date or year of birth and last 4 digits match the UIDAI app",
+            required=True,
+        ),
+        ChecklistItem(
+            key="screenshot_masked",
+            label="Any screenshot shows only the last 4 digits of the Aadhaar number",
             required=True,
         ),
     ],
-    "licence": [
+    ("licence", "manual"): _MANUAL_LICENCE,
+    ("licence", "demo"): _MANUAL_LICENCE,
+    ("licence", "parivahan_lookup"): [
         ChecklistItem(
             key="photo_matches_person",
             label="The photo on the licence matches the person in front of you",
             required=True,
         ),
         ChecklistItem(
-            key="details_match_card",
-            label="The typed details match the front and back of the card",
+            key="lookup_matches_card",
+            label="The Parivahan record matches the licence (number, name, date of birth)",
             required=True,
         ),
         ChecklistItem(
@@ -117,14 +200,33 @@ CHECKLISTS: dict[str, list[ChecklistItem]] = {
             label="The vehicle classes allow driving an auto-rickshaw",
             required=True,
         ),
-        ChecklistItem(key="valid_today", label="The licence is valid today", required=True),
         ChecklistItem(
-            key="digilocker_cross_check",
-            label="Also seen in the driver's DigiLocker or mParivahan app (optional)",
-            required=False,
+            key="valid_today", label="Parivahan shows the licence valid today", required=True
         ),
+        _DIGILOCKER,
     ],
 }
+
+# Allowed clock difference between the phone that looked the licence up and the server.
+LOOKUP_CLOCK_SKEW = timedelta(minutes=5)
+
+
+def available_methods(settings: Settings, check_type: str) -> list[str]:
+    """Methods a new attempt may use (rule 8). `uidai_qr` is never offered: its decoder is not
+    built (D48). `demo` only outside production and only with DEMO_VERIFIER_ENABLED."""
+    methods = ["manual"]
+    if check_type == "identity" and settings.AADHAAR_APP_ATTEST_ENABLED:
+        methods.append("uidai_app_attested")
+    if check_type == "licence":
+        methods.append("parivahan_lookup")
+    if settings.DEMO_VERIFIER_ENABLED and settings.APP_ENV in ("development", "test"):
+        methods.append("demo")
+    return methods
+
+
+def _key(check: KycCheck) -> tuple[str, str]:
+    return (check.check_type, check.method)
+
 
 OPEN_STATUSES = ("draft", "submitted", "under_review")
 DECIDABLE_STATUSES = ("submitted", "under_review")
@@ -200,6 +302,15 @@ def _attempt_and_driver(
     else:
         require_kyc(user, driver)
     return check, driver
+
+
+def _require_method(check: KycCheck, *methods: str) -> None:
+    if check.method not in methods:
+        raise AppError(
+            "KYC_WRONG_METHOD",
+            "This attempt uses a different method. Use that method's form.",
+            details={"method": check.method},
+        )
 
 
 def _require_draft(check: KycCheck) -> None:
@@ -294,9 +405,11 @@ def attempts_out(session: Session, checks: list[KycCheck]) -> list[AttemptOut]:
                 check_type=check.check_type,
                 attempt_no=check.attempt_no,
                 method=check.method,
+                method_label=METHOD_LABELS.get(check.method, check.method),
                 status=check.status,
                 is_current=check.is_current,
                 is_simulated=check.is_simulated,
+                evidence=dict(check.evidence),
                 submitted_at=check.submitted_at,
                 reviewed_by=refs.get(check.reviewed_by) if check.reviewed_by else None,
                 reviewed_at=check.reviewed_at,
@@ -310,8 +423,14 @@ def attempts_out(session: Session, checks: list[KycCheck]) -> list[AttemptOut]:
                         document_type=idd.document_type,
                         id_last4=idd.id_last4,
                         name_on_document=idd.name_on_document,
-                        dob_or_yob=idd.dob_or_yob,
-                        gender=idd.gender,
+                        masked_fields=[
+                            name
+                            for name, value in (
+                                ("id_dob_or_yob", idd.dob_or_yob),
+                                ("id_gender", idd.gender),
+                            )
+                            if value
+                        ],
                     )
                     if idd is not None
                     else None
@@ -320,13 +439,16 @@ def attempts_out(session: Session, checks: list[KycCheck]) -> list[AttemptOut]:
                     LicenceDetailsOut(
                         licence_number_masked=_mask(lic.licence_number_last4),
                         name_on_licence=lic.name_on_licence,
-                        date_of_birth=lic.date_of_birth,
+                        masked_fields=["licence_number"]
+                        + (["licence_date_of_birth"] if lic.date_of_birth else []),
                         issue_date=lic.issue_date,
                         valid_until_non_transport=lic.valid_until_non_transport,
                         valid_until_transport=lic.valid_until_transport,
                         valid_until=lic.valid_until(),
                         vehicle_classes=list(lic.vehicle_classes),
                         issuing_authority=lic.issuing_authority,
+                        lookup_status_text=lic.lookup_status_text,
+                        looked_up_at=lic.looked_up_at,
                     )
                     if lic is not None
                     else None
@@ -343,8 +465,8 @@ def attempts_out(session: Session, checks: list[KycCheck]) -> list[AttemptOut]:
                     )
                     for e in events.get(check.id, [])
                 ],
-                checklist=CHECKLISTS[check.check_type],
-                required_documents=list(REQUIRED_DOCS[check.check_type]),
+                checklist=CHECKLISTS.get(_key(check), []),
+                required_documents=list(REQUIRED_DOCS.get(_key(check), ())),
             )
         )
     return result
@@ -370,7 +492,9 @@ def consent_out(session: Session, consent: Consent) -> ConsentOut:
     )
 
 
-def driver_kyc(session: Session, user: CurrentUser, driver_id: int) -> DriverKycOut:
+def driver_kyc(
+    session: Session, settings: Settings, user: CurrentUser, driver_id: int
+) -> DriverKycOut:
     driver = get_driver(session, driver_id)
     require_kyc(user, driver)
     checks = list(
@@ -393,6 +517,11 @@ def driver_kyc(session: Session, user: CurrentUser, driver_id: int) -> DriverKyc
         consents=[consent_out(session, c) for c in consents],
         has_kyc_consent=_has_kyc_consent(session, driver.id),
         accepted_id_types=accepted_id_types(session),
+        available_methods={t: available_methods(settings, t) for t in ("identity", "licence")},
+        can_reveal=is_owner_or_manager(user, driver),
+        can_capture=can_capture_kyc(user, driver),
+        can_decide=can_decide_kyc(user, driver),
+        can_view_documents=is_owner_or_manager(user, driver),
     )
 
 
@@ -477,6 +606,7 @@ def withdraw_consent(
 
 def start_attempt(
     session: Session,
+    settings: Settings,
     user: CurrentUser,
     driver_id: int,
     *,
@@ -486,8 +616,8 @@ def start_attempt(
 ) -> KycCheck:
     driver = get_driver(session, driver_id, lock=True)
     require_kyc_edit(user, driver)
-    if method not in AVAILABLE_METHODS:
-        raise AppError("KYC_METHOD_NOT_AVAILABLE", "This verification method is not available yet.")
+    if method not in available_methods(settings, check_type):
+        raise AppError("KYC_METHOD_NOT_AVAILABLE", "This verification method is not available.")
     if not _has_kyc_consent(session, driver.id):
         raise AppError(
             "CONSENT_REQUIRED",
@@ -529,6 +659,7 @@ def start_attempt(
         attempt_no=(last_no or 0) + 1,
         method=method,
         status="draft",
+        is_simulated=method == "demo",  # never counts in production (eligibility, startup)
         is_current=True,
         created_by=user.id,
     )
@@ -547,6 +678,7 @@ def start_attempt(
             "attempt_no": check.attempt_no,
             "method": method,
             "status": "draft",
+            "is_simulated": check.is_simulated,
         },
         ip=ip,
     )
@@ -564,6 +696,7 @@ def save_identity_details(
     check, _ = _attempt_and_driver(session, user, attempt_id, edit=True, lock=True)
     if check.check_type != "identity":
         raise AppError("WRONG_CHECK_TYPE", "This attempt is not an identity check.")
+    _require_method(check, "manual", "demo")
     _require_draft(check)
     if data.document_type not in accepted_id_types(session):
         raise AppError(
@@ -573,11 +706,20 @@ def save_identity_details(
     details = session.scalars(
         select(IdentityDetails).where(IdentityDetails.kyc_check_id == check.id)
     ).one_or_none()
+    values = data.model_dump()
+    # Masked fields left blank keep the saved value (N17).
+    for key in ("dob_or_yob", "gender"):
+        if values[key] is None and details is not None:
+            values[key] = getattr(details, key)
+    if values["dob_or_yob"] is None:
+        raise AppError(
+            "FIELD_REQUIRED", "Enter the date or year of birth on the document.", status_code=422
+        )
     if details is None:
-        details = IdentityDetails(kyc_check_id=check.id, **data.model_dump())
+        details = IdentityDetails(kyc_check_id=check.id, **values)
         session.add(details)
     else:
-        for key, value in data.model_dump().items():
+        for key, value in values.items():
             setattr(details, key, value)
     session.flush()
     write_audit(
@@ -604,7 +746,67 @@ def save_licence_details(
     check, driver = _attempt_and_driver(session, user, attempt_id, edit=True, lock=True)
     if check.check_type != "licence":
         raise AppError("WRONG_CHECK_TYPE", "This attempt is not a licence check.")
+    _require_method(check, "manual", "demo")
     _require_draft(check)
+    _save_licence(session, settings, user, check, driver, data, extra={}, ip=ip)
+    return check
+
+
+def save_parivahan_lookup(
+    session: Session,
+    settings: Settings,
+    user: CurrentUser,
+    attempt_id: int,
+    data: ParivahanLookupIn,
+    *,
+    ip: str | None,
+) -> KycCheck:
+    """Record what staff read on the official Parivahan page (licence method a)."""
+    check, driver = _attempt_and_driver(session, user, attempt_id, edit=True, lock=True)
+    if check.check_type != "licence":
+        raise AppError("WRONG_CHECK_TYPE", "This attempt is not a licence check.")
+    _require_method(check, "parivahan_lookup")
+    _require_draft(check)
+    if data.looked_up_at > clock.utc_now() + LOOKUP_CLOCK_SKEW:
+        raise AppError(
+            "LOOKUP_TIME_IN_FUTURE", "The lookup time cannot be in the future.", status_code=422
+        )
+    licence = LicenceDetailsIn.model_validate(
+        data.model_dump(exclude={"lookup_status_text", "looked_up_at"})
+    )
+    extra = {"lookup_status_text": data.lookup_status_text, "looked_up_at": data.looked_up_at}
+    _save_licence(session, settings, user, check, driver, licence, extra=extra, ip=ip)
+    return check
+
+
+def _save_licence(
+    session: Session,
+    settings: Settings,
+    user: CurrentUser,
+    check: KycCheck,
+    driver: Driver,
+    data: LicenceDetailsIn,
+    *,
+    extra: dict[str, Any],
+    ip: str | None,
+) -> None:
+    details = session.scalars(
+        select(LicenceDetails).where(LicenceDetails.kyc_check_id == check.id)
+    ).one_or_none()
+    values: dict[str, Any] = data.model_dump(exclude={"licence_number", "date_of_birth"})
+    values.update(extra)
+    values["driver_id"] = driver.id
+    # Masked fields left blank keep the saved value (N17).
+    if data.date_of_birth is not None:
+        values["date_of_birth"] = pii.encrypt_licence_dob(settings, driver.id, data.date_of_birth)
+    elif details is None:
+        values["date_of_birth"] = None
+    if data.licence_number is None:
+        if details is None:
+            raise AppError("FIELD_REQUIRED", "Enter the licence number.", status_code=422)
+        _store_licence_details(session, check, details, values)
+        _audit_licence_details(session, user, check, data, ip=ip)
+        return
     try:
         number = normalise_licence_number(data.licence_number)
     except ValueError as exc:
@@ -629,18 +831,20 @@ def save_licence_details(
     if taken is not None:
         raise AppError("LICENCE_TAKEN", "This licence number is already registered to a driver.")
 
-    values: dict[str, Any] = data.model_dump(exclude={"licence_number"})
     values.update(
-        driver_id=driver.id,
         licence_number=field_cipher(settings).encrypt(
-            number, context=f"licence_details.licence_number:{driver.id}"
+            number, context=pii.licence_number_context(driver.id)
         ),
         licence_number_hash=number_hash,
         licence_number_last4=number[-4:],
     )
-    details = session.scalars(
-        select(LicenceDetails).where(LicenceDetails.kyc_check_id == check.id)
-    ).one_or_none()
+    _store_licence_details(session, check, details, values)
+    _audit_licence_details(session, user, check, data, ip=ip)
+
+
+def _store_licence_details(
+    session: Session, check: KycCheck, details: LicenceDetails | None, values: dict[str, Any]
+) -> None:
     if details is None:
         session.add(LicenceDetails(kyc_check_id=check.id, **values))
     else:
@@ -655,6 +859,13 @@ def save_licence_details(
                 "LICENCE_TAKEN", "This licence number is already registered to a driver."
             ) from exc
         raise
+
+
+def _audit_licence_details(
+    session: Session, user: CurrentUser, check: KycCheck, data: LicenceDetailsIn, *, ip: str | None
+) -> None:
+    """Only visible fields (validity, classes) are recorded; never the licence number or the
+    date of birth (D45)."""
     write_audit(
         session,
         action="kyc.details_saved",
@@ -666,6 +877,61 @@ def save_licence_details(
             "valid_until_transport": data.valid_until_transport,
             "vehicle_classes": data.vehicle_classes,
         },
+        ip=ip,
+    )
+
+
+def save_attestation(
+    session: Session,
+    settings: Settings,
+    user: CurrentUser,
+    attempt_id: int,
+    data: AttestationIn,
+    *,
+    ip: str | None,
+) -> KycCheck:
+    """Identity method b (D47): what staff saw in the UIDAI app. 404 while the flag is off."""
+    if not settings.AADHAAR_APP_ATTEST_ENABLED:
+        raise not_found()
+    check, _ = _attempt_and_driver(session, user, attempt_id, edit=True, lock=True)
+    if check.check_type != "identity":
+        raise AppError("WRONG_CHECK_TYPE", "This attempt is not an identity check.")
+    _require_method(check, "uidai_app_attested")
+    _require_draft(check)
+    details = session.scalars(
+        select(IdentityDetails).where(IdentityDetails.kyc_check_id == check.id)
+    ).one_or_none()
+    values: dict[str, Any] = {
+        "document_type": "masked_aadhaar",
+        "id_last4": data.id_last4,
+        "name_on_document": data.name_on_document,
+        "dob_or_yob": data.dob_or_yob,
+        "gender": data.gender,
+        "qr_signature_valid": data.signature_valid,
+    }
+    # Masked fields left blank keep the saved value (N17).
+    for key in ("dob_or_yob", "gender"):
+        if values[key] is None and details is not None:
+            values[key] = getattr(details, key)
+    if values["dob_or_yob"] is None:
+        raise AppError(
+            "FIELD_REQUIRED", "Enter the date or year of birth shown in the app.", status_code=422
+        )
+    if details is None:
+        session.add(IdentityDetails(kyc_check_id=check.id, **values))
+    else:
+        for key, value in values.items():
+            setattr(details, key, value)
+    # Kept as evidence whatever it says; "not valid" blocks approval (D49).
+    check.evidence = {**check.evidence, "uidai_app_signature_valid": data.signature_valid}
+    session.flush()
+    write_audit(
+        session,
+        action="kyc.attestation_saved",
+        entity_type="kyc_check",
+        entity_id=check.id,
+        actor_id=user.id,
+        after={"signature_valid": data.signature_valid},
         ip=ip,
     )
     return check
@@ -682,7 +948,7 @@ def upload_attempt_document(
     ip: str | None,
 ) -> Document:
     check, _ = _attempt_and_driver(session, user, attempt_id, edit=True, lock=True)
-    if doc_type not in DOC_TYPES_BY_CHECK[check.check_type]:
+    if doc_type not in DOC_TYPES.get(_key(check), ()):
         raise AppError(
             "DOC_TYPE_NOT_ALLOWED",
             "This document does not belong to this check.",
@@ -727,12 +993,24 @@ def submit_attempt(
             )
         )
     )
-    missing += [d for d in REQUIRED_DOCS[check.check_type] if d not in uploaded]
+    missing += [d for d in REQUIRED_DOCS.get(_key(check), ()) if d not in uploaded]
     if missing:
         raise AppError(
             "KYC_INCOMPLETE",
             "Complete the details and upload the required documents first.",
             details={"missing": missing},
+        )
+    if check.method == "parivahan_lookup":
+        # Link the record to its screenshot (the latest one uploaded).
+        details = session.scalars(
+            select(LicenceDetails).where(LicenceDetails.kyc_check_id == check.id)
+        ).one()
+        details.lookup_screenshot_document_id = session.scalar(
+            select(func.max(Document.id)).where(
+                Document.owner_type == "kyc_check",
+                Document.owner_id == check.id,
+                Document.doc_type == "lookup_screenshot",
+            )
         )
     check.status = "submitted"
     check.submitted_at = utc_now()
@@ -761,12 +1039,13 @@ def decide_attempt(
     reason: str | None,
     ip: str | None,
 ) -> KycCheck:
-    check, _ = _attempt_and_driver(session, user, attempt_id, edit=False, lock=True)
+    check, driver = _attempt_and_driver(session, user, attempt_id, edit=False, lock=True)
+    require_kyc_decide(user, driver)
     if not check.is_current or check.status not in DECIDABLE_STATUSES:
         raise AppError(
             "KYC_INVALID_TRANSITION", "Only a submitted attempt can be approved or rejected."
         )
-    items = CHECKLISTS[check.check_type]
+    items = CHECKLISTS.get(_key(check), [])
     known = {item.key for item in items}
     unknown = sorted(set(checklist) - known)
     if unknown:
@@ -783,6 +1062,14 @@ def decide_attempt(
                 "CHECKLIST_INCOMPLETE",
                 "Tick every required checklist item before approving.",
                 details={"missing": missing},
+            )
+        if check.method == "uidai_app_attested" and not check.evidence.get(
+            "uidai_app_signature_valid"
+        ):
+            raise AppError(
+                "UIDAI_SIGNATURE_NOT_VALID",
+                "The UIDAI app did not show the signature as valid. Reject, or ask for "
+                "documents again.",
             )
     elif not reason:
         raise AppError(
@@ -908,6 +1195,16 @@ def reopen_attempt(
     return new
 
 
+# --- Production guard ---------------------------------------------------------------------------
+
+
+def count_simulated_current_checks(session: Session) -> int:
+    """Used at startup: production refuses to run with any (hard constraint 6)."""
+    return int(
+        session.scalar(select(func.count()).where(KycCheck.is_current, KycCheck.is_simulated)) or 0
+    )
+
+
 # --- Eligibility ----------------------------------------------------------------------------------
 
 
@@ -974,7 +1271,8 @@ def _queue_subquery(session: Session, user: CurrentUser) -> Any:
             )
             .outerjoin(LicenceDetails, LicenceDetails.kyc_check_id == KycCheck.id)
         )
-        if not sees_all_kyc(user):
+        # D46: staff (edit_any included) see only the drivers they manage; the owner sees all.
+        if not user.is_owner:
             statement = statement.where(Driver.managed_by == user.id)
         selects.append(statement)
     return union_all(*selects).subquery("queue")

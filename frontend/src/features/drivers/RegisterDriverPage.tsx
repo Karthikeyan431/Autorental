@@ -171,6 +171,7 @@ function WizardStep({
             checkType={checkType}
             attempt={data[checkType]}
             acceptedIdTypes={data.accepted_id_types}
+            methods={data.available_methods[checkType]}
             defaultName={driver.full_name}
             onChanged={refresh}
           />
@@ -207,7 +208,11 @@ function WizardStep({
                 >
                   {strings.drivers.review}
                 </Link>
-                <DecisionPanel attempt={attempt} onChanged={refresh} />
+                <DecisionPanel
+                  attempt={attempt}
+                  canDecide={driver.can_reveal}
+                  onChanged={refresh}
+                />
               </>
             ) : (
               <Button variant="secondary" onClick={() => go(checkType === 'identity' ? 3 : 4)}>
