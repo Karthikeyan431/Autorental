@@ -56,6 +56,8 @@ export type ApiRequestInit = Omit<RequestInit, 'body'> & {
   body?: BodyInit;
   /** Send the access token and refresh it on 401 (default true). */
   auth?: boolean;
+  /** 'blob' returns the body as a Blob (documents, shown from memory, never a public URL). */
+  responseType?: 'json' | 'blob';
 };
 
 const AUTH_PATH = '/api/v1/auth/';
@@ -82,11 +84,11 @@ export async function apiFetch<T>(path: string, init: ApiRequestInit = {}): Prom
 }
 
 async function request<T>(path: string, init: ApiRequestInit): Promise<T> {
-  const { json, headers: initHeaders, auth = true, ...rest } = init;
+  const { json, headers: initHeaders, auth = true, responseType = 'json', ...rest } = init;
   const headers = new Headers(initHeaders);
   const requestId = newRequestId();
   headers.set('X-Request-ID', requestId);
-  headers.set('Accept', 'application/json');
+  if (responseType === 'json') headers.set('Accept', 'application/json');
   const token = getAccessToken();
   if (auth && token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`);
@@ -107,6 +109,7 @@ async function request<T>(path: string, init: ApiRequestInit): Promise<T> {
 
   const responseRequestId = response.headers.get('X-Request-ID') ?? requestId;
   if (response.status === 204) return undefined as T;
+  if (responseType === 'blob' && response.ok) return (await response.blob()) as T;
 
   const text = await response.text();
   let data: unknown = undefined;

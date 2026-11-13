@@ -1,0 +1,230 @@
+/** Consent, KYC and eligibility endpoints (docs/api.md "Consents", "KYC"). */
+
+import { apiFetch } from '../../lib/api';
+import type { KycStatus, UserRef } from '../drivers/api';
+import type { PageOf } from '../staff/api';
+
+export type CheckType = 'identity' | 'licence';
+export type IdDocumentType = 'masked_aadhaar' | 'voter_id' | 'passport';
+
+export type DocumentMeta = {
+  id: number;
+  owner_type: string;
+  owner_id: number;
+  doc_type: string;
+  mime_type: string;
+  size_bytes: number;
+  uploaded_at: string;
+  content_url: string;
+};
+
+export type ChecklistItem = { key: string; label: string; required: boolean };
+
+export type IdentityDetails = {
+  document_type: IdDocumentType;
+  id_last4: string;
+  name_on_document: string | null;
+  dob_or_yob: string | null;
+  gender: string | null;
+};
+
+export type LicenceDetails = {
+  licence_number_masked: string;
+  name_on_licence: string | null;
+  date_of_birth: string | null;
+  issue_date: string | null;
+  valid_until_non_transport: string | null;
+  valid_until_transport: string | null;
+  valid_until: string | null;
+  vehicle_classes: string[];
+  issuing_authority: string | null;
+};
+
+export type KycEvent = {
+  id: number;
+  from_status: string | null;
+  to_status: string;
+  actor: UserRef | null;
+  at: string;
+  reason: string | null;
+};
+
+export type Attempt = {
+  id: number;
+  driver_id: number;
+  check_type: CheckType;
+  attempt_no: number;
+  method: string;
+  status: KycStatus;
+  is_current: boolean;
+  is_simulated: boolean;
+  submitted_at: string | null;
+  reviewed_by: UserRef | null;
+  reviewed_at: string | null;
+  decision_reason: string | null;
+  review_checklist: Record<string, boolean> | null;
+  reopened_from_id: number | null;
+  created_by: UserRef | null;
+  created_at: string;
+  identity_details: IdentityDetails | null;
+  licence_details: LicenceDetails | null;
+  documents: DocumentMeta[];
+  events: KycEvent[];
+  checklist: ChecklistItem[];
+  required_documents: string[];
+};
+
+export type Consent = {
+  id: number;
+  purpose: string;
+  notice_version: string;
+  method: string;
+  captured_by: UserRef;
+  captured_at: string;
+  withdrawn_at: string | null;
+};
+
+export type DriverKyc = {
+  driver_id: number;
+  identity: Attempt | null;
+  licence: Attempt | null;
+  history: Attempt[];
+  consents: Consent[];
+  has_kyc_consent: boolean;
+  accepted_id_types: IdDocumentType[];
+};
+
+export type IdentityInput = {
+  document_type: IdDocumentType;
+  id_last4: string;
+  name_on_document: string;
+  dob_or_yob: string;
+};
+
+export type LicenceInput = {
+  licence_number: string;
+  name_on_licence: string;
+  date_of_birth: string | null;
+  issue_date: string | null;
+  valid_until_non_transport: string | null;
+  valid_until_transport: string | null;
+  vehicle_classes: string[];
+  issuing_authority: string | null;
+};
+
+export type Decision = 'approve' | 'reject' | 'resubmit';
+
+export type Bucket = 'pending' | 'under_review' | 'resubmission' | 'rejected' | 'expiring';
+
+export type QueueItem = {
+  driver: { id: number; code: string; full_name: string; managed_by: UserRef };
+  check_type: CheckType;
+  bucket: Bucket;
+  attempt_id: number | null;
+  attempt_no: number | null;
+  status: KycStatus | null;
+  submitted_at: string | null;
+  licence_valid_until: string | null;
+};
+
+export type QueueCounts = Record<Bucket, number>;
+
+export type Eligibility = {
+  driver_id: number;
+  on_date: string;
+  ok: boolean;
+  reasons: string[];
+  messages: string[];
+  licence_valid_until: string | null;
+};
+
+/** The notice version staff read to the driver (shown on the consent step). */
+export const CONSENT_NOTICE_VERSION = 'kyc-notice-v1';
+
+export function fetchDriverKyc(driverId: number) {
+  return apiFetch<DriverKyc>(`/api/v1/drivers/${driverId}/kyc`);
+}
+
+export function recordConsent(driverId: number, method: 'in_person_signed' | 'in_person_checkbox') {
+  return apiFetch<Consent>(`/api/v1/drivers/${driverId}/consents`, {
+    method: 'POST',
+    json: { purpose: 'kyc', notice_version: CONSENT_NOTICE_VERSION, method },
+  });
+}
+
+export function startAttempt(driverId: number, checkType: CheckType) {
+  return apiFetch<Attempt>(`/api/v1/drivers/${driverId}/kyc/${checkType}/attempts`, {
+    method: 'POST',
+    json: { method: 'manual' },
+  });
+}
+
+export function fetchAttempt(attemptId: number) {
+  return apiFetch<Attempt>(`/api/v1/kyc/attempts/${attemptId}`);
+}
+
+export function saveIdentity(attemptId: number, input: IdentityInput) {
+  return apiFetch<Attempt>(`/api/v1/kyc/attempts/${attemptId}/identity-details`, {
+    method: 'PUT',
+    json: input,
+  });
+}
+
+export function saveLicence(attemptId: number, input: LicenceInput) {
+  return apiFetch<Attempt>(`/api/v1/kyc/attempts/${attemptId}/licence-details`, {
+    method: 'PUT',
+    json: input,
+  });
+}
+
+export function uploadAttemptDocument(
+  attemptId: number,
+  docType: string,
+  file: Blob,
+  name: string,
+) {
+  const body = new FormData();
+  body.append('doc_type', docType);
+  body.append('file', file, name);
+  return apiFetch<DocumentMeta>(`/api/v1/kyc/attempts/${attemptId}/documents`, {
+    method: 'POST',
+    body,
+  });
+}
+
+export function submitAttempt(attemptId: number) {
+  return apiFetch<Attempt>(`/api/v1/kyc/attempts/${attemptId}/submit`, { method: 'POST' });
+}
+
+export function decideAttempt(
+  attemptId: number,
+  decision: Decision,
+  checklist: Record<string, boolean>,
+  reason: string | null,
+) {
+  return apiFetch<Attempt>(`/api/v1/kyc/attempts/${attemptId}/decision`, {
+    method: 'POST',
+    json: { decision, checklist, reason },
+  });
+}
+
+export function reopenAttempt(attemptId: number, reason: string) {
+  return apiFetch<Attempt>(`/api/v1/kyc/attempts/${attemptId}/reopen`, {
+    method: 'POST',
+    json: { reason },
+  });
+}
+
+export function fetchQueue(bucket: Bucket, page: number, search: string) {
+  const query = new URLSearchParams({ bucket, page: String(page), page_size: '20' });
+  if (search.trim()) query.set('search', search.trim());
+  return apiFetch<PageOf<QueueItem>>(`/api/v1/kyc/queue?${query.toString()}`);
+}
+
+export function fetchQueueCounts() {
+  return apiFetch<QueueCounts>('/api/v1/kyc/queue/counts');
+}
+
+export function fetchEligibility(driverId: number) {
+  return apiFetch<Eligibility>(`/api/v1/drivers/${driverId}/eligibility`);
+}

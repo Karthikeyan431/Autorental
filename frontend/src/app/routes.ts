@@ -14,6 +14,7 @@ import DriversListPage from '../features/drivers/DriversListPage';
 import RegisterDriverPage from '../features/drivers/RegisterDriverPage';
 import EscalationsPage from '../features/escalations/EscalationsPage';
 import KycQueuePage from '../features/kyc/KycQueuePage';
+import KycReviewPage from '../features/kyc/KycReviewPage';
 import PayRequestsPage from '../features/pay-requests/PayRequestsPage';
 import PaymentsPage from '../features/payments/PaymentsPage';
 import ReportsPage from '../features/reports/ReportsPage';
@@ -106,6 +107,15 @@ export const APP_PAGES: AppPage[] = [
     week: 3,
     Component: KycQueuePage,
     inNav: true,
+    group: 'drivers',
+    inShell: true,
+  },
+  {
+    path: '/kyc/attempts/:id',
+    title: p.kycReview,
+    week: 3,
+    Component: KycReviewPage,
+    inNav: false,
     group: 'drivers',
     inShell: true,
   },

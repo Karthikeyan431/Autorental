@@ -7,6 +7,7 @@ export type SettingsValues = {
   licence_alert_days: number;
   vehicle_alert_days: number;
   permitted_licence_classes: string[];
+  accepted_id_types: ('masked_aadhaar' | 'voter_id' | 'passport')[];
   advance_adjustments_enabled: boolean;
   refunds_enabled: boolean;
   staff_limit: number;
