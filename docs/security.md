@@ -16,13 +16,15 @@ Target: OWASP ASVS level 1 at launch. The app holds identity documents and money
 ## Authorisation
 
 - Permission codes are listed in `api.md`. Every route declares its permission, and a test lists every route and fails if one has no declared permission.
-- Staff can edit only the drivers they manage (N1 default); reads follow N1.
-- Return 404, not 403, for a record the user is not allowed to see.
+- Staff can edit only the drivers they manage (N1 default); reads follow N1. Editing a driver you can see but may not edit gives 403 `DRIVER_NOT_EDITABLE` (D37).
+- Return 404, not 403, for a record the user is not allowed to see. KYC documents, details, consents and decisions are visible only to the owner, the managing staff member and staff with `drivers.edit_any` (D33).
 
 ## Data protection
 
 - Never store a full Aadhaar number (see `kyc.md`).
 - Encrypt licence numbers and the owner's TOTP secret at application level (AES-256-GCM, `cryptography`). Keys come from the environment, with key rotation through `key_id`.
+- Licence-number duplicate checks use HMAC-SHA256 with `LOOKUP_HMAC_KEY`, never a plain hash. This key is never rotated; back it up with the other keys (D36).
+- No field accepts a 12-digit (Aadhaar-like) number: identity fields, names, addresses and reasons all refuse it.
 - Documents are encrypted on disk, served only through the audited endpoint, and never given public URLs.
 - Logs never contain names, mobiles, Aadhaar or licence numbers, addresses, tokens or passwords. Log user ids and request ids.
 - Consent is recorded before KYC. Build to the DPDP Rules 2025 now: their main obligations apply from 13 May 2027.
@@ -39,7 +41,8 @@ Target: OWASP ASVS level 1 at launch. The app holds identity documents and money
 - **CORS:** only the app's own origin.
 - **CSRF:** cookie-based refresh plus `SameSite=Strict`, and a double-submit token on `/auth/refresh`.
 - **Rate limits:** login, refresh, uploads and statement import.
-- **Uploads:** check the real file type and size; strip EXIF; never serve uploads inline as HTML.
+- **Uploads:** check the real file type and size; strip EXIF; refuse decompression bombs; never serve uploads inline as HTML, and serve PDFs only as attachments (D40).
+- **Development only:** `DEV_INSECURE_COOKIES=true` (for `dev.ps1 -Lan`) drops the Secure cookie flag; the app refuses to start with it unless `APP_ENV=development` (D39).
 - **Dependencies:** `pip-audit` and `npm audit` (both free) run in `check.ps1`.
 
 ## Backups and recovery (free)

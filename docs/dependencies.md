@@ -2,7 +2,7 @@
 
 Every dependency must be **free and open source** (hard constraint 1). Versions are pinned exactly; the lock files (`backend/requirements.lock`, `backend/requirements-dev.lock`, `frontend/package-lock.json`) are the final word. Update this file whenever a package is added or upgraded, and ask before adding anything not listed in `CLAUDE.md`.
 
-**Registry check:** every Week 1 version below was confirmed against PyPI (`pip index versions`) and npm (`npm view`) on **2026-11-12**, immediately before installing. The Week 2 packages (argon2-cffi, pyjwt, pyotp, cryptography, qrcode, react-hook-form, zod, @hookform/resolvers) were re-checked on **2026-11-13** and are installed. Packages for later weeks show the latest version on that date and are re-checked when they are added.
+**Registry check:** every Week 1 version below was confirmed against PyPI (`pip index versions`) and npm (`npm view`) on **2026-11-12**, immediately before installing. The Week 2 packages (argon2-cffi, pyjwt, pyotp, cryptography, qrcode, react-hook-form, zod, @hookform/resolvers) were re-checked on **2026-11-13** and are installed. The Week 3 packages (python-multipart, pillow) were re-checked on **2026-11-13** and are installed; neither adds a dependency of its own. Packages for later weeks show the latest version on that date and are re-checked when they are added.
 
 ## Backend (Python 3.12)
 
