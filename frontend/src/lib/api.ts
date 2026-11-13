@@ -1,7 +1,12 @@
 /**
  * API client. Every call sends an X-Request-ID; every failure becomes an ApiError carrying the
  * stable error code and request id from the backend's error envelope (docs/api.md).
+ *
+ * When signed in, the access token is sent as a Bearer header. A 401 on any non-auth endpoint
+ * triggers one refresh (one at a time) and one retry; if that fails, the session has expired.
  */
+
+import { getAccessToken, getRefreshHandler, notifySessionExpired } from './session';
 
 export type ErrorDetails = Record<string, unknown>;
 
@@ -46,14 +51,46 @@ export function newRequestId(): string {
   return crypto.randomUUID().replaceAll('-', '');
 }
 
-export type ApiRequestInit = Omit<RequestInit, 'body'> & { json?: unknown; body?: BodyInit };
+export type ApiRequestInit = Omit<RequestInit, 'body'> & {
+  json?: unknown;
+  body?: BodyInit;
+  /** Send the access token and refresh it on 401 (default true). */
+  auth?: boolean;
+};
+
+const AUTH_PATH = '/api/v1/auth/';
 
 export async function apiFetch<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
-  const { json, headers: initHeaders, ...rest } = init;
+  try {
+    return await request<T>(path, init);
+  } catch (error) {
+    const canRefresh =
+      error instanceof ApiError &&
+      error.status === 401 &&
+      init.auth !== false &&
+      !path.startsWith(AUTH_PATH) &&
+      getAccessToken() !== null;
+    if (!canRefresh) throw error;
+    const handler = getRefreshHandler();
+    const refreshed = handler ? await handler() : false;
+    if (!refreshed) {
+      notifySessionExpired();
+      throw error;
+    }
+    return request<T>(path, init);
+  }
+}
+
+async function request<T>(path: string, init: ApiRequestInit): Promise<T> {
+  const { json, headers: initHeaders, auth = true, ...rest } = init;
   const headers = new Headers(initHeaders);
   const requestId = newRequestId();
   headers.set('X-Request-ID', requestId);
   headers.set('Accept', 'application/json');
+  const token = getAccessToken();
+  if (auth && token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
 
   let body = rest.body;
   if (json !== undefined) {

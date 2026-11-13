@@ -10,7 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     # Secrets. Empty is tolerated outside production only.
     SECRET_KEY: SecretStr = SecretStr("")
     FIELD_ENCRYPTION_KEY: SecretStr = SecretStr("")  # base64 of 32 bytes (AES-256-GCM)
+    FIELD_ENCRYPTION_KEY_ID: str = "f1"  # stored with each encrypted value, for rotation
     FILE_ENCRYPTION_KEYS: SecretStr = SecretStr("")  # "key_id:base64,key_id:base64"
     ACTIVE_FILE_KEY_ID: str = ""
 
@@ -55,6 +56,13 @@ class Settings(BaseSettings):
     # Feature flags. Both default to off (N13; hard constraint 6).
     AADHAAR_QR_INAPP_ENABLED: bool = False
     DEMO_VERIFIER_ENABLED: bool = False
+
+    # Sign-in throttle per IP address: this many failures within the window gives 429.
+    LOGIN_IP_MAX_FAILURES: int = Field(default=20, ge=1)
+    LOGIN_IP_WINDOW_MINUTES: int = Field(default=15, ge=1)
+
+    # Development seed only: the password for the fake owner and staff. Never committed.
+    SEED_DEV_PASSWORD: SecretStr = SecretStr("")
 
     CORS_ORIGIN: str = ""
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
@@ -92,6 +100,8 @@ def check_production_safety(settings: Settings) -> None:
     field_key = settings.FIELD_ENCRYPTION_KEY.get_secret_value()
     if _is_placeholder(field_key) or not _is_key(field_key):
         problems.append("FIELD_ENCRYPTION_KEY must be base64 of 32 random bytes")
+    if not settings.FIELD_ENCRYPTION_KEY_ID.strip():
+        problems.append("FIELD_ENCRYPTION_KEY_ID must not be empty")
 
     file_keys: dict[str, str] = {}
     for item in filter(None, settings.FILE_ENCRYPTION_KEYS.get_secret_value().split(",")):

@@ -48,7 +48,13 @@ _INTERNAL_MESSAGE = "Something went wrong. Please quote the request id if you re
 
 
 class AppError(Exception):
-    """A refusal with a stable code, e.g. AppError("LICENCE_EXPIRED", "...", status_code=409)."""
+    """A refusal with a stable code, e.g. AppError("LICENCE_EXPIRED", "...", status_code=409).
+
+    Normally the request's transaction is rolled back. With `keep_changes=True` it is committed
+    before the error is returned: used when the refusal itself must be recorded (a failed
+    sign-in increments the lockout counter and writes its audit entry; a reused refresh token
+    revokes its family).
+    """
 
     def __init__(
         self,
@@ -57,12 +63,14 @@ class AppError(Exception):
         *,
         status_code: int = 409,
         details: dict[str, Any] | None = None,
+        keep_changes: bool = False,
     ) -> None:
         super().__init__(message)
         self.code = str(code)
         self.message = message
         self.status_code = status_code
         self.details = details or {}
+        self.keep_changes = keep_changes
 
 
 def error_response(

@@ -1,0 +1,152 @@
+# The same gate as scripts/check.ps1, on Linux: ruff, mypy, pytest (real PostgreSQL 17),
+# pip-audit, eslint, tsc, vitest, npm audit. Every check step runs even if an earlier one
+# fails, so one run shows every problem.
+#
+# Secrets: none from the repository. The PostgreSQL service is a throwaway container that
+# lives for one run; its superuser password is a per-run value used only to create the roles.
+# The app_owner and app_user passwords, SECRET_KEY and the encryption keys are generated
+# fresh in every run and masked in the log.
+#
+# Skipped here by design: tests/scripts/test_db_setup_script.py (db-setup.ps1 is a Windows
+# script; it runs locally in check.ps1).
+name: checks
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci-throwaway-${{ github.run_id }}-${{ github.run_attempt }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: ci-throwaway-${{ github.run_id }}-${{ github.run_attempt }}
+      APP_ENV: test
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.lock
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend packages (lock file)
+        run: python -m pip install -r backend/requirements-dev.lock
+
+      - name: Install frontend packages (lock file)
+        working-directory: frontend
+        run: npm ci
+
+      - name: Create roles, test database and generated secrets
+        run: |
+          set -euo pipefail
+          hex() { python -c "import secrets; print(secrets.token_hex(24))"; }
+          key() { python -c "import base64, secrets; print(base64.b64encode(secrets.token_bytes(32)).decode())"; }
+          OWNER_PW=$(hex); USER_PW=$(hex); SECRET=$(hex)$(hex); FIELD_KEY=$(key); FILE_KEY=$(key)
+          for value in "$OWNER_PW" "$USER_PW" "$SECRET" "$FIELD_KEY" "$FILE_KEY"; do
+            echo "::add-mask::$value"
+          done
+
+          psql -v ON_ERROR_STOP=1 -d postgres \
+            -v owner_pw="$OWNER_PW" -v user_pw="$USER_PW" <<'SQL'
+          CREATE ROLE app_owner LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+          CREATE ROLE app_user LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+          ALTER ROLE app_owner WITH PASSWORD :'owner_pw';
+          ALTER ROLE app_user WITH PASSWORD :'user_pw';
+          CREATE DATABASE arms_test OWNER app_owner ENCODING 'UTF8' TEMPLATE template0;
+          REVOKE ALL ON DATABASE arms_test FROM PUBLIC;
+          GRANT CONNECT, TEMPORARY ON DATABASE arms_test TO app_user;
+          SQL
+
+          USER_URL="postgresql+psycopg://app_user:${USER_PW}@localhost:5432/arms_test"
+          OWNER_URL="postgresql+psycopg://app_owner:${OWNER_PW}@localhost:5432/arms_test"
+          {
+            echo "DATABASE_URL=${USER_URL}"
+            echo "MIGRATION_DATABASE_URL=${OWNER_URL}"
+            echo "TEST_DATABASE_URL=${USER_URL}"
+            echo "TEST_MIGRATION_DATABASE_URL=${OWNER_URL}"
+            echo "SECRET_KEY=${SECRET}"
+            echo "FIELD_ENCRYPTION_KEY=${FIELD_KEY}"
+            echo "FILE_ENCRYPTION_KEYS=k1:${FILE_KEY}"
+            echo "ACTIVE_FILE_KEY_ID=k1"
+          } >> "$GITHUB_ENV"
+
+      # --- Backend -------------------------------------------------------------------------
+      - name: ruff (lint)
+        if: ${{ !cancelled() }}
+        working-directory: backend
+        run: ruff check .
+
+      - name: ruff (format check)
+        if: ${{ !cancelled() }}
+        working-directory: backend
+        run: ruff format --check .
+
+      - name: mypy (strict)
+        if: ${{ !cancelled() }}
+        working-directory: backend
+        run: mypy
+
+      - name: pytest
+        if: ${{ !cancelled() }}
+        working-directory: backend
+        run: python -m pytest -q
+
+      - name: pip-audit
+        if: ${{ !cancelled() }}
+        working-directory: backend
+        run: pip-audit -r requirements-dev.lock --progress-spinner off
+
+      # --- Frontend ------------------------------------------------------------------------
+      - name: eslint
+        if: ${{ !cancelled() }}
+        working-directory: frontend
+        run: npm run -s lint
+
+      - name: tsc
+        if: ${{ !cancelled() }}
+        working-directory: frontend
+        run: npm run -s typecheck
+
+      - name: vitest
+        if: ${{ !cancelled() }}
+        working-directory: frontend
+        run: npm run -s test
+
+      - name: npm audit
+        if: ${{ !cancelled() }}
+        working-directory: frontend
+        run: npm audit

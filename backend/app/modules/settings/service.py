@@ -30,6 +30,7 @@ def create_settings_version(
     actor_id: int | None,
     effective_from: datetime | None = None,
     reason: str | None = None,
+    ip: str | None = None,
 ) -> SettingsVersion:
     """Insert a new version: the current values with `changes` applied. Never updates a row."""
     now = utc_now()
@@ -53,5 +54,6 @@ def create_settings_version(
         actor_id=actor_id,
         after={**values.model_dump(), "effective_from": version.effective_from},
         reason=reason,
+        ip=ip,
     )
     return version

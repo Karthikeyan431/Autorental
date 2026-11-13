@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { renderApp } from '../test/render';
-import { APP_PAGES } from './routes';
+import { ownerUser } from '../test/users';
+import { APP_PAGES, canOpen } from './routes';
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -18,15 +19,16 @@ beforeEach(() => {
 });
 
 describe('App shell', () => {
-  it('lists every module in the navigation', () => {
+  it('lists every module the owner can open in the navigation', () => {
     renderApp('/');
     const nav = screen.getByRole('navigation', { name: 'Main' });
-    for (const page of APP_PAGES.filter((p) => p.inNav)) {
+    for (const page of APP_PAGES.filter((p) => p.inNav && canOpen(p, ownerUser))) {
       expect(within(nav).getByRole('link', { name: page.title })).toBeInTheDocument();
     }
   });
 
-  it.each(APP_PAGES.map((p) => [p.path, p.title, p.week] as const))(
+  // Screens that later milestones build still show their placeholder.
+  it.each(APP_PAGES.filter((p) => p.week > 2).map((p) => [p.path, p.title, p.week] as const))(
     '%s shows its empty page',
     (path, title, week) => {
       renderApp(path.replace(':id', '1'));

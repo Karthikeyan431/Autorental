@@ -78,9 +78,12 @@ docs/        requirements, rules, data model, milestones
 .\scripts\db-setup.ps1   # roles, databases, backend\.env; never changes an existing role's password (-RotatePasswords to rotate, -DryRun to preview)
 .\scripts\dev.ps1        # migrations, then API (uvicorn --reload, :8000, own window) and Vite (:5173, proxies /api)
 .\scripts\check.ps1      # the gate: ruff, mypy, pytest, pip-audit, eslint, tsc, vitest, npm audit
-.\scripts\seed.ps1       # load fake demo data into the dev database (refuses APP_ENV=production)
+.\scripts\seed.ps1       # load fake demo data into the dev database (refuses APP_ENV=production); users need SEED_DEV_PASSWORD
+.\scripts\create-owner.ps1   # first run: create the single owner account (terminal prompts, no default password)
 cd backend; ..\.venv\Scripts\alembic upgrade head
 ```
+
+CI: `.github/workflows/checks.yml` runs the same checks on GitHub (push to master, pull requests).
 
 From Claude Code's shell, run a script as `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\check.ps1`.
 The venv lives at the repo root (`.venv`). Tests rebuild the `arms_test` schema on every run.

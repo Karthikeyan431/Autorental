@@ -1,5 +1,8 @@
 """Migrations, extensions and the grants that make insert-only tables insert-only."""
 
+import importlib.util
+from pathlib import Path
+
 import pytest
 from alembic import command
 from sqlalchemy import Engine, inspect, text
@@ -8,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.db_grants import APP_USER_ROLE, INSERT_ONLY_TABLES
+from app.modules.users.models import GRANTABLE_CODES_SQL
 from tests.conftest import alembic_config
 
 DOCUMENTED_INSERT_ONLY = {
@@ -105,3 +109,24 @@ def test_downgrade_to_base_then_upgrade_to_head(
     with owner_engine.connect() as connection:
         tables = set(inspect(connection).get_table_names())
     assert {"users", "settings_versions", "audit_logs"} <= tables
+
+
+def test_migration_0002_grantable_codes_match_the_code() -> None:
+    """The database CHECK on user_permissions is a frozen copy of GRANTABLE; keep them equal."""
+    path = Path(__file__).resolve().parents[2] / "alembic" / "versions"
+    spec = importlib.util.spec_from_file_location(
+        "migration_0002", path / "0002_auth_and_permissions.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.GRANTABLE_CODES_SQL == GRANTABLE_CODES_SQL
+
+
+def test_week_2_tables_get_ordinary_grants(db: Session) -> None:
+    for table in ("user_permissions", "sessions", "recovery_codes", "login_attempts"):
+        for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE"):
+            assert db.scalar(
+                text("SELECT has_table_privilege('app_user', :t, :p)"),
+                {"t": table, "p": privilege},
+            ), f"{table} {privilege}"

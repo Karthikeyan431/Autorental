@@ -1,14 +1,15 @@
 """GET /api/v1/health: public; reports API and database status (docs/api.md)."""
 
 import logging
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.core.permissions import public
 from app.version import __version__
 
 router = APIRouter(tags=["health"])
@@ -22,7 +23,7 @@ class HealthOut(BaseModel):
 
 
 @router.get("/health", response_model=HealthOut, responses={503: {"model": HealthOut}})
-def health(request: Request) -> JSONResponse:
+def health(request: Request, _: Annotated[None, Depends(public())]) -> JSONResponse:
     engine: Engine = request.app.state.engine
     try:
         with engine.connect() as connection:

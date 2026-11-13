@@ -1,6 +1,7 @@
 """Request id: accepted from a safe incoming X-Request-ID header or generated, returned on
 every response, and attached to every log line and error envelope."""
 
+import ipaddress
 import logging
 import re
 import time
@@ -8,6 +9,7 @@ import uuid
 from contextvars import ContextVar
 
 from starlette.datastructures import MutableHeaders
+from starlette.requests import Request
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 REQUEST_ID_HEADER = "X-Request-ID"
@@ -72,3 +74,23 @@ class RequestIdMiddleware:
                     "duration_ms": round((time.perf_counter() - started) * 1000, 1),
                 },
             )
+
+
+def client_ip(request: Request) -> str | None:
+    """The caller's IP address, or None if it is not a valid address (e.g. the test client).
+
+    In production uvicorn runs behind Caddy on the same host and trusts its X-Forwarded-For
+    (uvicorn's default `forwarded_allow_ips` is 127.0.0.1), so this is the real client.
+    """
+    host = request.client.host if request.client else None
+    if not host:
+        return None
+    try:
+        return str(ipaddress.ip_address(host))
+    except ValueError:
+        return None
+
+
+def user_agent(request: Request, limit: int = 300) -> str | None:
+    value = request.headers.get("user-agent")
+    return value[:limit] if value else None

@@ -1,6 +1,6 @@
 """Validation for settings versions. Defaults follow docs/data-model.md."""
 
-from datetime import time
+from datetime import datetime, time
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -61,3 +61,17 @@ class SettingsChanges(BaseModel):
     weekly_pay_day: IsoWeekday | None = None
     escalation_suggest_after_days: NonNegativeInt | None = None
     weekly_mdr_warning_paise: Paise | None = None
+
+
+class SettingsChangeRequest(SettingsChanges):
+    """POST /settings: the fields to change, plus an optional reason for the audit log."""
+
+    reason: Annotated[str, Field(max_length=500)] | None = None
+
+
+class SettingsVersionOut(SettingsValues):
+    id: int
+    effective_from: datetime
+    created_at: datetime
+    created_by: int | None
+    created_by_name: str | None = None

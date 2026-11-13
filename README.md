@@ -46,6 +46,7 @@ for every checkout.
 .\scripts\dev.ps1        # API on :8000 (own window) + web app on http://127.0.0.1:5173
 .\scripts\check.ps1      # the gate: ruff, mypy, pytest, pip-audit, eslint, tsc, vitest, npm audit
 .\scripts\seed.ps1       # fake demo data into arms_dev (refuses APP_ENV=production)
+.\scripts\create-owner.ps1   # first run: create the owner account (prompts; no default password)
 .\scripts\db-setup.ps1   # roles, databases, backend\.env; never changes existing role passwords
 .\scripts\db-setup.ps1 -DryRun           # show what it would do, change nothing
 .\scripts\db-setup.ps1 -RotatePasswords  # new role passwords (every checkout must update its .env)
@@ -57,9 +58,20 @@ If PowerShell blocks scripts, run them as
 
 ### 4. Try it
 
-- Web app: http://127.0.0.1:5173 (click through the empty pages; resize to phone width).
+- Create the owner: `.\scripts\create-owner.ps1`, then sign in at http://127.0.0.1:5173 and set
+  up your authenticator app (TOTP) when asked. Save the recovery codes.
+- Or, for fake demo users, put a password of your own in `backend\.env` as `SEED_DEV_PASSWORD=`
+  and run `.\scripts\seed.ps1`: it adds Test Owner (DEMO) `9000000001` and two staff,
+  `9000000002` and `9000000003`, all with that password (only if no owner exists yet).
+- Web app: http://127.0.0.1:5173 (resize to phone width; staff mostly use phones).
 - Health: http://127.0.0.1:8000/api/v1/health returns `{"status":"ok","db":"ok",...}`.
 - API docs (development only): http://127.0.0.1:8000/api/v1/docs
+
+### 5. Continuous integration
+
+`.github/workflows/checks.yml` runs the same checks as `check.ps1` on GitHub (Ubuntu, PostgreSQL
+17 service container) for pushes to `master` and for pull requests. It uses only secrets
+generated during the run. The `db-setup.ps1` tests are Windows-only and are skipped there.
 
 ## Layout
 

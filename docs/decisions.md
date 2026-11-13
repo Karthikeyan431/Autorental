@@ -38,3 +38,23 @@ Decisions made with the agency lead. Client-facing rule changes still need the c
 | D20 | **The rent due time has no default.** From Week 5, agreement activation and accrual refuse with `RENT_DUE_TIME_NOT_SET` ("Set the rent due time in Settings") while it is not set, with tests. | week-05, CLAUDE.md |
 | D21 | **ISO weekdays everywhere:** 1 = Monday ... 7 = Sunday. Python uses `isoweekday()` (`app.core.time.iso_weekday`); the frontend uses `isoWeekday()`, and ESLint bans `getDay()`/`getUTCDay()`. Tested on both sides. | CLAUDE.md, data-model.md, week-05 |
 | D22 | **`db-setup.ps1` never changes an existing role's password.** It only creates what is missing. With roles present and no `.env` it refuses (exit 2). `-RotatePasswords` rotates on request; `-DryRun` previews. Tested with dry runs against a temporary env file. | README.md, CLAUDE.md |
+
+## 13 November 2026 (Week 2 plan approval)
+
+| # | Decision | Docs updated |
+| --- | --- | --- |
+| D23 | **@hookform/resolvers 7.0.6** (MIT) approved. **qrcode 8.2** brought forward from Week 6 to draw the owner's TOTP QR as SVG; its licence was checked (BSD-3-Clause). | dependencies.md |
+| D24 | **Common-password list:** SecLists `10k-most-common.txt` (MIT) is committed unmodified, with its source and licence recorded. | dependencies.md |
+| D25 | **Audit log in Week 2:** a minimal owner-only list (`GET /audit-logs`, newest first, paginated) and `GET /audit-logs/verify`. Filters and export stay in Week 8. | api.md |
+| D26 | **Owner TOTP enrolment** happens at the owner's first sign-in in the browser. Until enrolment is confirmed, the challenge token allows only `/auth/totp/setup` and `/auth/totp/confirm`. Recovery codes are shown once, and the owner must tick "I have saved these codes" to continue. | api.md, security.md |
+| D27 | **Lockout response:** 429 `ACCOUNT_LOCKED` with "Too many attempts. Try again in 15 minutes." The IP throttle is 20 failures per 15 minutes (`LOGIN_IP_MAX_FAILURES`, `LOGIN_IP_WINDOW_MINUTES`). | api.md, .env.example |
+| D28 | **GitHub Actions** (the remote is private): `.github/workflows/checks.yml` runs the `check.ps1` steps on ubuntu-latest with a PostgreSQL 17 service container, on push to master and on pull requests; a newer push cancels an older run. Only generated, per-run secrets. | README.md |
+| D29 | **No `/me` endpoint** (CLAUDE.md): the signed-in user and their permissions come back from login, TOTP, confirm and refresh. | api.md |
+
+## 13 November 2026 (Week 2 review)
+
+| # | Decision | Docs updated |
+| --- | --- | --- |
+| D30 | **Refresh rate limit: Week 8 hardening.** `POST /auth/refresh` has no rate limit of its own yet (it already needs a valid, unrevoked refresh token and the CSRF header). Add a per-IP and per-session-family limit in Week 8 with the other hardening (security.md "Rate limits"). No change in Week 2. | week-08 at build time |
+| D31 | **Multi-tab refresh:** the frontend runs every refresh inside a Web Lock (`navigator.locks`, lock `arms-auth-refresh`) and shares the result on a BroadcastChannel (`arms-auth`), so only one tab calls `/auth/refresh` at a time and the others use its new access token; sign-out is broadcast too. Prevents two tabs from tripping reuse detection. | — (code: `frontend/src/lib/refresh-coordinator.ts`) |
+| D32 | **Password policy:** a password may not contain the user's own mobile number (the 10 digits, separators ignored) or name (the full name without spaces, or any word of it with 3 or more letters), ignoring case. Code `PASSWORD_TOO_PERSONAL` (422). Checked on change password, owner creation and staff creation with a given password. | api.md, security.md |

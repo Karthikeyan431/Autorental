@@ -8,3 +8,9 @@ alembic==1.20.1
 psycopg[binary]==3.3.9
 uvicorn==0.54.0
 tzdata==2026.6
+# Week 2 (confirmed against PyPI on 2026-11-13)
+argon2-cffi==25.1.0
+pyjwt==2.15.1
+pyotp==2.10.0
+cryptography==50.0.2
+qrcode==8.2

@@ -12,7 +12,12 @@ from app.core.db import make_engine, make_sessionmaker
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.request_context import REQUEST_ID_HEADER, RequestIdMiddleware
+from app.modules.audit.router import router as audit_router
+from app.modules.auth.router import CSRF_HEADER
+from app.modules.auth.router import router as auth_router
 from app.modules.health.router import router as health_router
+from app.modules.settings.router import router as settings_router
+from app.modules.users.router import router as users_router
 from app.version import __version__
 
 API_PREFIX = "/api/v1"
@@ -43,10 +48,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_origins=[settings.CORS_ORIGIN],
             allow_credentials=True,
             allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-            allow_headers=["Content-Type", "Authorization", REQUEST_ID_HEADER, "Idempotency-Key"],
+            allow_headers=[
+                "Content-Type",
+                "Authorization",
+                REQUEST_ID_HEADER,
+                "Idempotency-Key",
+                CSRF_HEADER,
+            ],
             expose_headers=[REQUEST_ID_HEADER],
         )
     app.add_middleware(RequestIdMiddleware)
 
-    app.include_router(health_router, prefix=API_PREFIX)
+    # Every route declares its access rule (tests/api/test_route_registry.py).
+    for router in (health_router, auth_router, users_router, settings_router, audit_router):
+        app.include_router(router, prefix=API_PREFIX)
     return app
