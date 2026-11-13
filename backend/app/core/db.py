@@ -54,7 +54,21 @@ def make_sessionmaker(engine: Engine) -> sessionmaker[Session]:
 
 
 def get_session(request: Request) -> Iterator[Session]:
-    """One session and one transaction per request."""
+    """One session and one transaction per request.
+
+    Commits when the handler returns, rolls back when it raises, except for an AppError raised
+    with `keep_changes=True`, which commits first (see app.core.errors.AppError).
+    """
     factory: sessionmaker[Session] = request.app.state.sessionmaker
-    with factory() as session, session.begin():
-        yield session
+    with factory() as session:
+        session.begin()
+        try:
+            yield session
+        except Exception as exc:
+            if getattr(exc, "keep_changes", False) is True:
+                session.commit()
+            else:
+                session.rollback()
+            raise
+        else:
+            session.commit()

@@ -6,6 +6,8 @@ so every run also proves the migrations work in both directions.
 
 * `db`        an app_user session inside a transaction that is rolled back after the test.
 * `owner_db`  the same, connected as app_owner (for tamper tests and setup only).
+* `clean_db`  for tests that commit (API tests, CLI subprocesses): empties every table before
+              and after the test, as app_owner.
 """
 
 from collections.abc import Iterator
@@ -15,7 +17,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine
+from sqlalchemy import Engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
@@ -99,3 +101,21 @@ def client(test_settings: Settings, migrated_db: None) -> Iterator[TestClient]:
     app = create_app(test_settings)
     with TestClient(app, raise_server_exceptions=False) as test_client:
         yield test_client
+
+
+TRUNCATE_SQL = text(
+    "TRUNCATE recovery_codes, sessions, user_permissions, login_attempts, audit_logs, "
+    "settings_versions, users RESTART IDENTITY CASCADE"
+)
+
+
+def _truncate(engine: Engine) -> None:
+    with engine.begin() as connection:
+        connection.execute(TRUNCATE_SQL)
+
+
+@pytest.fixture
+def clean_db(owner_engine: Engine) -> Iterator[None]:
+    _truncate(owner_engine)
+    yield
+    _truncate(owner_engine)

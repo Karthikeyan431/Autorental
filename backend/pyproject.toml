@@ -38,6 +38,12 @@ plugins = ["pydantic.mypy"]
 files = ["app", "tests"]
 explicit_package_bases = true
 
+[[tool.mypy.overrides]]
+# qrcode ships no type hints; adding types-qrcode would be a new dependency. Only
+# app/modules/auth/service.py uses it (TOTP setup QR as SVG).
+module = ["qrcode", "qrcode.*"]
+ignore_missing_imports = true
+
 [tool.pydantic-mypy]
 init_forbid_extra = true
 init_typed = true
