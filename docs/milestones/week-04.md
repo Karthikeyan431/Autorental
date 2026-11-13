@@ -9,7 +9,8 @@
 **UIDAI app attestation (`uidai_app_attested`), behind `AADHAAR_APP_ATTEST_ENABLED=false` (D47)**
 - A form for: name, date or year of birth, last 4 digits, "signature shown as valid in the UIDAI app" (yes or no), and an optional masked screenshot.
 - UI label: "Checked by staff with the UIDAI app".
-- Built the same way as in-app scanning: the flag is read at startup (add it to `config.py` and `.env.example`, default `false`); when it is off, the endpoint returns 404 and the UI hides the option. Until N13 is answered, identity is checked by manual review of the masked Aadhaar.
+- Built the same way as in-app scanning: the flag is read at startup (add it to `config.py` and `.env.example`, default `false`); when it is off, the endpoint returns 404 and the UI hides the option. Until N13 is answered, identity is checked by manual review of the masked Aadhaar and the licence by the Parivahan lookup record.
+- `uidai_app_attested` is added to the N13 question for the legal adviser (D47); do not turn the flag on in production until N13 is answered.
 
 **UIDAI Secure QR in the app (`uidai_qr`), behind `AADHAAR_QR_INAPP_ENABLED=false`**
 - **Back end:**
@@ -57,6 +58,9 @@
   current manager only. Others get 404 for document content (as before) and 403
   `KYC_DECIDE_NOT_ALLOWED` for a decision; their KYC queue shows only drivers they manage. If a
   manager is away, the owner changes the manager.
+- **Error codes (D46, D47):** keep the names `KYC_DECIDE_NOT_ALLOWED` and `FIELD_NOT_EDITABLE`
+  (both 403); add them to the error table in `docs/api.md` with `REVEAL_NOT_ALLOWED` and
+  `REVEAL_RATE_LIMITED`.
 - **Aadhaar unchanged:** last 4 digits only; no field may hold a full Aadhaar number (the
   existing `NoAadhaarStr` checks stay on every free-text field). A document image showing a
   full number is refused at review (required checklist item, D41); there is no automatic

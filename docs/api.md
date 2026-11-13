@@ -93,12 +93,15 @@ Status codes:
 | --- | --- | --- |
 | `NOT_FOUND` | 404 | A driver, attempt or document that does not exist, or KYC you may not see (D33) |
 | `DRIVER_NOT_EDITABLE` | 403 | Editing (or capturing KYC for) a driver you can see but do not manage (D37) |
+| `FIELD_NOT_EDITABLE` | 403 | Week 4: a masked field in an edit by someone who is not the owner or the current manager (N17, D46) |
+| `KYC_DECIDE_NOT_ALLOWED` | 403 | Week 4: a KYC decision by someone who is not the owner or the current manager (N16, D46) |
+| `REVEAL_NOT_ALLOWED` / `REVEAL_RATE_LIMITED` | 403 / 429 | Week 4: a reveal by someone who is not the owner or the current manager / over `reveal_limit_per_hour` (D45, N18) |
 | `MOBILE_TAKEN` | 409 | Another driver has this mobile (after normalising to +91) |
 | `LICENCE_TAKEN` | 409 | Another driver has this licence number (after normalising) |
 | `INVALID_LICENCE_NUMBER` | 422 | Not 6 to 20 letters and digits after removing spaces and dashes |
 | `MANAGER_NOT_AVAILABLE` / `SAME_MANAGER` | 409 | Change manager to an inactive or unknown user / the current manager |
 | `CONSENT_REQUIRED` | 409 | A KYC attempt before a `kyc` consent (or after it was withdrawn) |
-| `KYC_METHOD_NOT_AVAILABLE` | 409 | A method other than `manual` (Week 4 adds the others) |
+| `KYC_METHOD_NOT_AVAILABLE` | 409 | A method other than `manual` (Week 4 adds the others; a UIDAI method whose flag is off gives 404, D47) |
 | `KYC_ATTEMPT_OPEN` / `KYC_REOPEN_REQUIRED` | 409 | A new attempt while one is open / after approval or rejection (owner reopen only, D34) |
 | `ATTEMPT_NOT_EDITABLE` | 409 | Details or uploads on an attempt that is no longer a draft |
 | `KYC_INCOMPLETE` | 409 | Submit without details or a required document (`details.missing`) |
