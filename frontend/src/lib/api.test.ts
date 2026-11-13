@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError, apiFetch } from './api';
+import { setAccessToken, setRefreshHandler, setSessionExpiredHandler } from './session';
 
 function jsonResponse(status: number, body: unknown, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
@@ -90,5 +91,65 @@ describe('apiFetch', () => {
   it('returns undefined for 204 No Content', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
     await expect(apiFetch('/api/v1/x')).resolves.toBeUndefined();
+  });
+});
+
+describe('apiFetch with a session', () => {
+  afterEach(() => {
+    setAccessToken(null);
+    setRefreshHandler(null);
+    setSessionExpiredHandler(null);
+  });
+
+  it('sends the access token as a Bearer header', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
+    vi.stubGlobal('fetch', fetchMock);
+    setAccessToken('token-1');
+    await apiFetch('/api/v1/settings/current');
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer token-1');
+  });
+
+  it('refreshes once on 401 and retries with the new token', async () => {
+    const unauthenticated = { error: { code: 'UNAUTHENTICATED', message: 'Please sign in.' } };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(401, unauthenticated))
+      .mockResolvedValueOnce(jsonResponse(200, { ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    setAccessToken('old-token');
+    const refresh = vi.fn(async () => {
+      setAccessToken('new-token');
+      return true;
+    });
+    setRefreshHandler(refresh);
+
+    await expect(apiFetch('/api/v1/users')).resolves.toEqual({ ok: true });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    const [, retry] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(new Headers(retry.headers).get('Authorization')).toBe('Bearer new-token');
+  });
+
+  it('ends the session when the refresh fails', async () => {
+    const unauthenticated = { error: { code: 'UNAUTHENTICATED', message: 'Please sign in.' } };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(401, unauthenticated)));
+    setAccessToken('old-token');
+    setRefreshHandler(async () => false);
+    const expired = vi.fn();
+    setSessionExpiredHandler(expired);
+
+    const error = (await apiFetch('/api/v1/users').catch((e: unknown) => e)) as ApiError;
+    expect(error.status).toBe(401);
+    expect(expired).toHaveBeenCalledTimes(1);
+  });
+
+  it('never refreshes for the auth endpoints themselves', async () => {
+    const refusal = { error: { code: 'INVALID_CREDENTIALS', message: 'Not correct.' } };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(401, refusal)));
+    setAccessToken('old-token');
+    const refresh = vi.fn(async () => true);
+    setRefreshHandler(refresh);
+    await apiFetch('/api/v1/auth/login', { method: 'POST' }).catch(() => undefined);
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

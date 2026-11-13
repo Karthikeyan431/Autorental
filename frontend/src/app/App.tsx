@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { BrowserRouter } from 'react-router';
 
 import { ToastProvider } from '../components/ui/Toast';
+import { AuthProvider } from '../features/auth/AuthProvider';
 import { AppRoutes } from './AppRoutes';
 
 export function App() {
@@ -15,9 +16,11 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
+        <AuthProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </AuthProvider>
       </ToastProvider>
     </QueryClientProvider>
   );

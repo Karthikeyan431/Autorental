@@ -2,6 +2,8 @@ import type { ComponentType } from 'react';
 
 import AgreementsPage from '../features/agreements/AgreementsPage';
 import AuditLogPage from '../features/audit/AuditLogPage';
+import type { Role, User } from '../features/auth/api';
+import ChangePasswordPage from '../features/auth/ChangePasswordPage';
 import SignInPage from '../features/auth/SignInPage';
 import AutosPage from '../features/autos/AutosPage';
 import BankStatementsPage from '../features/bank-statements/BankStatementsPage';
@@ -21,6 +23,9 @@ import { strings } from '../lib/strings';
 
 export type NavGroup = keyof typeof strings.nav.groups;
 
+/** Who may open a page. No rule: anyone signed in. The owner has every permission. */
+export type PageAccess = { role?: Role; permission?: string };
+
 export type AppPage = {
   path: string;
   title: string;
@@ -32,11 +37,12 @@ export type AppPage = {
   group: NavGroup;
   /** Rendered inside the app shell (everything except sign-in). */
   inShell: boolean;
+  access?: PageAccess;
 };
 
 const p = strings.pages;
 
-/** One entry per screen in docs/requirements.md §4. Role-aware navigation comes in Week 2. */
+/** One entry per screen in docs/requirements.md §4, plus the change-password page. */
 export const APP_PAGES: AppPage[] = [
   {
     path: '/sign-in',
@@ -50,20 +56,22 @@ export const APP_PAGES: AppPage[] = [
   {
     path: '/',
     title: p.ownerDashboard,
-    week: 8,
+    week: 2, // shell now; filled in by later weeks
     Component: OwnerDashboardPage,
     inNav: true,
     group: 'overview',
     inShell: true,
+    access: { role: 'owner' },
   },
   {
     path: '/my-dashboard',
     title: p.staffDashboard,
-    week: 8,
+    week: 2, // shell now; filled in by later weeks
     Component: StaffDashboardPage,
     inNav: true,
     group: 'overview',
     inShell: true,
+    access: { role: 'staff' },
   },
   {
     path: '/drivers',
@@ -145,6 +153,7 @@ export const APP_PAGES: AppPage[] = [
     inNav: true,
     group: 'money',
     inShell: true,
+    access: { permission: 'statements.upload' },
   },
   {
     path: '/escalations',
@@ -172,6 +181,7 @@ export const APP_PAGES: AppPage[] = [
     inNav: true,
     group: 'admin',
     inShell: true,
+    access: { permission: 'users.manage' },
   },
   {
     path: '/settings',
@@ -181,14 +191,32 @@ export const APP_PAGES: AppPage[] = [
     inNav: true,
     group: 'admin',
     inShell: true,
+    access: { permission: 'settings.manage' },
   },
   {
     path: '/audit-log',
     title: p.auditLog,
-    week: 8,
+    week: 2, // shell now; filled in by later weeks
     Component: AuditLogPage,
     inNav: true,
     group: 'admin',
     inShell: true,
+    access: { permission: 'audit.view' },
+  },
+  {
+    path: '/change-password',
+    title: p.changePassword,
+    week: 2,
+    Component: ChangePasswordPage,
+    inNav: false,
+    group: 'admin',
+    inShell: true,
   },
 ];
+
+export function canOpen(page: AppPage, user: User): boolean {
+  const { role, permission } = page.access ?? {};
+  if (role && user.role !== role) return false;
+  if (permission && !user.permissions.includes(permission)) return false;
+  return true;
+}
