@@ -2,9 +2,12 @@
 
 * At least 10 characters, at most 128.
 * Not one of the 10,000 most common passwords (SecLists, MIT licence; compared ignoring case).
+* Not containing the user's own mobile number or name, ignoring case: the full name with
+  spaces removed, or any word of the name with 3 or more letters (PASSWORD_TOO_PERSONAL).
 * Hashes are Argon2id with argon2-cffi's default (RFC 9106 low-memory) parameters.
 """
 
+import re
 import secrets
 from functools import lru_cache
 from pathlib import Path
@@ -35,8 +38,33 @@ def is_common_password(password: str) -> bool:
     return password.strip().lower() in _common_passwords()
 
 
-def check_password_policy(password: str) -> None:
-    """Raise a 422 AppError naming the rule the password breaks. The password is never echoed."""
+_NAME_WORD = re.compile(r"[^\W\d_]{3,}")  # 3+ letters, any script
+
+
+def is_personal_password(password: str, *, name: str | None, mobile: str | None) -> bool:
+    """True if the password contains the user's mobile number or name (ignoring case)."""
+    lowered = password.casefold()
+    if mobile:
+        digits = "".join(ch for ch in mobile if ch.isdigit())[-10:]
+        password_digits = "".join(ch for ch in password if ch.isdigit())
+        if len(digits) == 10 and digits in password_digits:
+            return True
+    if name:
+        folded = name.casefold()
+        compact = "".join(folded.split())
+        if len(compact) >= 3 and compact in "".join(lowered.split()):
+            return True
+        if any(word in lowered for word in _NAME_WORD.findall(folded)):
+            return True
+    return False
+
+
+def check_password_policy(
+    password: str, *, name: str | None = None, mobile: str | None = None
+) -> None:
+    """Raise a 422 AppError naming the rule the password breaks. The password is never echoed.
+
+    Pass the user's name and mobile whenever they are known."""
     if len(password) < MIN_PASSWORD_LENGTH:
         raise AppError(
             "PASSWORD_TOO_SHORT",
@@ -53,6 +81,12 @@ def check_password_policy(password: str) -> None:
         raise AppError(
             "PASSWORD_TOO_COMMON",
             "This password is too common. Choose a less predictable one.",
+            status_code=422,
+        )
+    if is_personal_password(password, name=name, mobile=mobile):
+        raise AppError(
+            "PASSWORD_TOO_PERSONAL",
+            "Do not use your name or mobile number in your password.",
             status_code=422,
         )
 

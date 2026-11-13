@@ -4,11 +4,12 @@ Target: OWASP ASVS level 1 at launch. The app holds identity documents and money
 
 ## Sign-in and sessions
 
-- Login with mobile number or email and a password. Passwords are hashed with **Argon2id**. Minimum 10 characters, and the 10,000 most common passwords are blocked (bundle a free list in the repo).
+- Login with mobile number or email and a password. Passwords are hashed with **Argon2id**. Minimum 10 characters, the 10,000 most common passwords are blocked (bundle a free list in the repo), and a password may not contain the user's own mobile number or name (D32).
 - **Owner 2-step sign-in:** a TOTP code from any free authenticator app (`pyotp`), required for the owner account. Generate recovery codes at setup and store them hashed.
 - **Access token:** 15 minutes, held in memory in the browser.
 - **Refresh token:** 7 days, in an `httpOnly`, `Secure`, `SameSite=Strict` cookie, rotated on every use. Its hash is stored in `sessions`. Reusing an old token revokes the whole session family.
 - Every request re-checks that the user is active, so deactivating staff takes effect on their next click.
+- Tabs take turns refreshing (Web Locks) and share the new access token (BroadcastChannel), so two open tabs never trip reuse detection (D31).
 - **Lockout and throttling:** 5 failed logins lock the account for 15 minutes; logins are also throttled per IP address.
 - The owner resets staff passwords, which forces a change at the next login. Email reset links are optional (free SMTP account) and come later.
 

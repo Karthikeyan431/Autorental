@@ -72,7 +72,7 @@ def test_owner_sets_grantable_permissions(
     assert response.status_code == 200, response.text
     assert sorted(response.json()["permissions"]) == sorted(wanted)
 
-    signed_in = login(api, "9000000101", "Staff-test-pass-0001").json()
+    signed_in = login(api, "9000000101", "Plum-stone-bell-0001").json()
     assert sorted(signed_in["user"]["permissions"]) == sorted(wanted)
 
     with Session(app_engine) as session:

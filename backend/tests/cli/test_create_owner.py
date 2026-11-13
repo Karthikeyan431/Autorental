@@ -31,7 +31,7 @@ def test_creates_the_owner(empty_users: Session) -> None:
     user = _run(
         empty_users,
         ["Test Owner", "9000000001", "owner@example.test"],
-        ["Owner-test-pass-0001", "Owner-test-pass-0001"],
+        ["Kite-river-lamp-0001", "Kite-river-lamp-0001"],
     )
     assert user.role == "owner"
     assert user.mobile == "+919000000001"
@@ -44,12 +44,12 @@ def test_creates_the_owner(empty_users: Session) -> None:
 
 def test_refuses_a_second_owner(empty_users: Session) -> None:
     answers = ["Test Owner", "9000000001", ""]
-    _run(empty_users, answers, ["Owner-test-pass-0001", "Owner-test-pass-0001"])
+    _run(empty_users, answers, ["Kite-river-lamp-0001", "Kite-river-lamp-0001"])
     with pytest.raises(OwnerAlreadyExistsError):
         _run(
             empty_users,
             ["Test Owner 2", "9000000002", ""],
-            ["Owner-test-pass-0002", "Owner-test-pass-0002"],
+            ["Kite-river-lamp-0002", "Kite-river-lamp-0002"],
         )
     assert empty_users.scalar(select(func.count()).select_from(User)) == 1
 
@@ -58,7 +58,7 @@ def test_mismatched_passwords_are_asked_again(empty_users: Session) -> None:
     user = _run(
         empty_users,
         ["Test Owner", "9000000001", ""],
-        ["Owner-test-pass-0001", "Typo-pass-00001", "Owner-test-pass-0001", "Owner-test-pass-0001"],
+        ["Kite-river-lamp-0001", "Typo-pass-00001", "Kite-river-lamp-0001", "Kite-river-lamp-0001"],
     )
     assert user.email is None
 
@@ -72,8 +72,8 @@ def test_weak_passwords_are_asked_again(empty_users: Session) -> None:
             "short",
             "1234567890",
             "1234567890",
-            "Owner-test-pass-0001",
-            "Owner-test-pass-0001",
+            "Kite-river-lamp-0001",
+            "Kite-river-lamp-0001",
         ],
     )
     assert user.role == "owner"
@@ -81,4 +81,27 @@ def test_weak_passwords_are_asked_again(empty_users: Session) -> None:
 
 def test_an_invalid_mobile_is_refused(empty_users: Session) -> None:
     with pytest.raises(AppError):
-        _run(empty_users, ["Test Owner", "12345", ""], ["Owner-test-pass-0001"] * 2)
+        _run(empty_users, ["Test Owner", "12345", ""], ["Kite-river-lamp-0001"] * 2)
+
+
+def test_a_password_with_the_owners_name_or_mobile_is_asked_again(empty_users: Session) -> None:
+    messages: list[str] = []
+    texts = iter(["Test Owner Lakshmi", "9000000001", ""])
+    secrets = iter(
+        [
+            "Lakshmi-2026-key",
+            "Lakshmi-2026-key",
+            "Key-9000000001-x",
+            "Key-9000000001-x",
+            "Kite-river-lamp-0001",
+            "Kite-river-lamp-0001",
+        ]
+    )
+    user = collect_and_create(
+        empty_users,
+        ask=lambda _prompt: next(texts),
+        ask_secret=lambda _prompt: next(secrets),
+        say=messages.append,
+    )
+    assert user.role == "owner"
+    assert messages.count("Do not use your name or mobile number in your password.") == 2

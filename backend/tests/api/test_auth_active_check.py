@@ -127,3 +127,18 @@ def test_changing_the_password_signs_out_other_sessions(
     )
     assert api.get(f"{API}/settings/current", headers=bearer(laptop)).status_code == 200
     assert api.get(f"{API}/settings/current", headers=bearer(phone)).status_code == 401
+
+
+def test_change_password_refuses_the_users_own_mobile_or_name(
+    api: TestClient, staff_factory: StaffFactory
+) -> None:
+    staff_factory(mobile="9000000101", name="Test Staff Meena")
+    token = staff_token(api, "9000000101")
+    for new_password in ("Pass-9000000101-x", "MEENA-river-2026", "x-teststaffmeena-x"):
+        response = api.post(
+            f"{API}/auth/change-password",
+            headers=bearer(token),
+            json={"current_password": STAFF_PASSWORD, "new_password": new_password},
+        )
+        assert response.status_code == 422, new_password
+        assert error_code(response) == "PASSWORD_TOO_PERSONAL"

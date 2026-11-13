@@ -12,8 +12,8 @@ from app.modules.users.service import create_owner, create_staff
 
 API = "/api/v1"
 OWNER_MOBILE = "9000000001"
-OWNER_PASSWORD = "Owner-test-pass-0001"
-STAFF_PASSWORD = "Staff-test-pass-0001"
+OWNER_PASSWORD = "Kite-river-lamp-0001"
+STAFF_PASSWORD = "Plum-stone-bell-0001"
 REFRESH_COOKIE = "arms_refresh"
 CSRF_COOKIE = "arms_csrf"
 

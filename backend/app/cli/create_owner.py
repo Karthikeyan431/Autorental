@@ -38,7 +38,7 @@ def _ask_required(ask: Ask, say: Say, prompt: str) -> str:
         say("This is required.")
 
 
-def _ask_password(ask_secret: Ask, say: Say) -> str:
+def _ask_password(ask_secret: Ask, say: Say, *, name: str, mobile: str) -> str:
     while True:
         first = ask_secret("Password (at least 10 characters, hidden): ")
         second = ask_secret("Type the password again: ")
@@ -46,7 +46,7 @@ def _ask_password(ask_secret: Ask, say: Say) -> str:
             say("The two passwords do not match. Try again.")
             continue
         try:
-            check_password_policy(first)
+            check_password_policy(first, name=name, mobile=mobile)
         except AppError as exc:
             say(exc.message)
             continue
@@ -63,7 +63,7 @@ def collect_and_create(session: Session, *, ask: Ask, ask_secret: Ask, say: Say)
     except ValueError as exc:
         raise AppError("INVALID_MOBILE", str(exc), status_code=422) from exc
     email = ask("Email (optional, press Enter to skip): ").strip() or None
-    password = _ask_password(ask_secret, say)
+    password = _ask_password(ask_secret, say, name=name, mobile=mobile)
     return create_owner(session, name=name, mobile=mobile, email=email, password=password)
 
 

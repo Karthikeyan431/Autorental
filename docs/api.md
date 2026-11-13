@@ -67,7 +67,7 @@ Status codes:
 | `CSRF_FAILED` | 403 | Missing or wrong `X-CSRF-Token` on refresh |
 | `REFRESH_INVALID` / `REFRESH_REUSED` | 401 | Unknown or expired refresh token / a rotated token reused (the whole session family is revoked) |
 | `PASSWORD_CHANGE_REQUIRED` | 403 | Any route except change-password and logout, after a reset |
-| `PASSWORD_TOO_SHORT` / `PASSWORD_TOO_LONG` / `PASSWORD_TOO_COMMON` | 422 | Password policy |
+| `PASSWORD_TOO_SHORT` / `PASSWORD_TOO_LONG` / `PASSWORD_TOO_COMMON` / `PASSWORD_TOO_PERSONAL` | 422 | Password policy (D32: no own mobile or name) |
 | `CURRENT_PASSWORD_INCORRECT` / `PASSWORD_UNCHANGED` | 409 | Change password |
 | `FORBIDDEN` | 403 | Missing permission |
 | `STAFF_LIMIT_REACHED` | 409 | Create or reactivate beyond `staff_limit` (rule 16) |

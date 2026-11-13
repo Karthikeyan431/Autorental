@@ -99,7 +99,10 @@ def seed(session: Session, settings: Settings) -> bool:
     created = _seed_settings(session)
     password = settings.SEED_DEV_PASSWORD.get_secret_value()
     if password:
-        created = _seed_users(session, password) or created
+        try:
+            created = _seed_users(session, password) or created
+        except AppError as exc:  # e.g. the password contains a demo user's name
+            raise SeedRefusedError(f"SEED_DEV_PASSWORD is not acceptable: {exc.message}") from exc
     return created
 
 

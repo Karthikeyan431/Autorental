@@ -65,3 +65,32 @@ def test_temporary_passwords_pass_the_policy_and_differ() -> None:
     for value in values:
         check_password_policy(value)
         assert len(value) >= 12
+
+
+@pytest.mark.parametrize(
+    "password",
+    [
+        "Pass-9000000101-x",  # the mobile number
+        "x-90000-00101-pass",  # the mobile with separators
+        "Ravi@2026xyz!",  # a word of the name, any case
+        "RAVIKUMAR-2026!",  # the full name without spaces
+        "my-kumar-key-77",  # another word of the name
+    ],
+)
+def test_passwords_with_the_users_mobile_or_name_are_refused(password: str) -> None:
+    with pytest.raises(AppError) as personal:
+        check_password_policy(password, name="Ravi Kumar", mobile="+919000000101")
+    assert personal.value.code == "PASSWORD_TOO_PERSONAL"
+    assert password not in personal.value.message
+
+
+def test_unrelated_passwords_pass_the_personal_check() -> None:
+    check_password_policy("Kite-river-lamp-0001", name="Ravi Kumar", mobile="+919000000101")
+    # Short name parts (under 3 letters) are not treated as the name on their own.
+    check_password_policy("Al-stone-bell-0001", name="Al Shan", mobile="+919000000101")
+    # Part of the mobile number is not the mobile number.
+    check_password_policy("Kite-9000000-lamp", name="Ravi Kumar", mobile="+919000000101")
+
+
+def test_the_personal_check_needs_the_user_details() -> None:
+    check_password_policy("Ravi@2026xyz!")  # nothing to compare against

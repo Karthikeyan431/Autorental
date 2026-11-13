@@ -64,7 +64,7 @@ def test_staff_cannot_raise_the_limit(
 ) -> None:
     staff_factory(mobile="9000000101")
     token = api.post(
-        f"{API}/auth/login", json={"login": "9000000101", "password": "Staff-test-pass-0001"}
+        f"{API}/auth/login", json={"login": "9000000101", "password": "Plum-stone-bell-0001"}
     ).json()["access_token"]
     response = api.post(f"{API}/settings", headers=bearer(token), json={"staff_limit": 50})
     assert response.status_code == 403

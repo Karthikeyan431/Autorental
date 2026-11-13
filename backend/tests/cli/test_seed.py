@@ -133,3 +133,9 @@ def test_seed_keeps_an_existing_owner(owner_db: Session) -> None:
     seed(owner_db, make_settings(APP_ENV="development", SEED_DEV_PASSWORD=SEED_PASSWORD))
     owners = owner_db.scalars(select(User).where(User.role == "owner")).all()
     assert [o.name for o in owners] == ["Test Owner Real"]
+
+
+def test_seed_refuses_a_dev_password_with_a_demo_users_name(owner_db: Session) -> None:
+    owner_db.execute(text("TRUNCATE users RESTART IDENTITY CASCADE"))
+    with pytest.raises(SeedRefusedError):
+        seed(owner_db, make_settings(APP_ENV="development", SEED_DEV_PASSWORD="Demo-river-2026"))

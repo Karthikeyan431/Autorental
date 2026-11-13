@@ -130,7 +130,7 @@ def create_owner(
         raise AppError("OWNER_EXISTS", "An owner account already exists.")
     normalised = _mobile_or_error(mobile)
     cleaned_email = _email_or_error(email)
-    check_password_policy(password)
+    check_password_policy(password, name=name, mobile=normalised)
     _ensure_unique(session, mobile=normalised, email=cleaned_email, exclude_id=None)
 
     user = User(
@@ -181,7 +181,7 @@ def create_staff(
         password = temporary
         must_change_password = True
     else:
-        check_password_policy(password)
+        check_password_policy(password, name=name, mobile=normalised)
 
     user = User(
         name=name,

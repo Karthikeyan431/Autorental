@@ -565,10 +565,10 @@ def change_password(
     new_password: str,
     client: Client,
 ) -> None:
-    check_password_policy(new_password)
     user = session.get(User, current_user.id, with_for_update=True)
     if user is None:
         raise unauthenticated()
+    check_password_policy(new_password, name=user.name, mobile=user.mobile)
     if not verify_password(user.password_hash, current_password):
         raise AppError("CURRENT_PASSWORD_INCORRECT", "Your current password is not correct.")
     if hmac.compare_digest(current_password, new_password):
