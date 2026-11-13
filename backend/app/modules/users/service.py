@@ -7,12 +7,14 @@ Rules:
   advisory lock so two requests cannot both pass the check.
 * Owner-only permission codes can never be granted (409 here, plus a database CHECK).
 * Deactivation and password resets revoke every session in the same transaction.
+* Account recovery from the server shell (`recover_account`, app/cli/reset_password.py) is the
+  only way to reset the owner's password or 2-step setup; the audit actor is "system:cli".
 
 Audit entries never contain names, mobiles, emails or passwords: only ids, flags, permission
 codes and the names of the fields that changed.
 """
 
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.core import time as clock
@@ -25,12 +27,13 @@ from app.core.permissions import (
     Permission,
     effective_permissions,
 )
-from app.core.phone import normalise_mobile
+from app.core.phone import looks_like_email, normalise_mobile
 from app.core.security import (
     check_password_policy,
     generate_temporary_password,
     hash_password,
 )
+from app.modules.auth.models import RecoveryCode
 from app.modules.auth.sessions import revoke_user_sessions
 from app.modules.settings.schemas import SettingsValues
 from app.modules.settings.service import get_current_settings
@@ -381,6 +384,72 @@ def reset_password(session: Session, *, actor_id: int, user_id: int, ip: str | N
         ip=ip,
     )
     return temporary
+
+
+CLI_ACTOR = "system:cli"
+
+
+def find_user_by_login(session: Session, login_id: str) -> User:
+    """The user with this mobile number or email (locked for update), or 404 USER_NOT_FOUND."""
+    value = login_id.strip()
+    statement = select(User).with_for_update()
+    if looks_like_email(value):
+        user = session.scalars(statement.where(func.lower(User.email) == value.lower())).first()
+    else:
+        try:
+            mobile = normalise_mobile(value)
+        except ValueError:
+            mobile = None
+        user = session.scalars(statement.where(User.mobile == mobile)).first() if mobile else None
+    if user is None:
+        raise AppError(
+            "USER_NOT_FOUND", "No user has that mobile number or email.", status_code=404
+        )
+    return user
+
+
+def recover_account(session: Session, user: User, *, new_password: str, reset_totp: bool) -> User:
+    """Account recovery from the server shell (app/cli/reset_password.py), any APP_ENV.
+
+    Sets the new password, clears the lockout, signs the user out everywhere and forces a
+    password change at the next sign-in. With reset_totp, clears the owner's 2-step setup and
+    recovery codes, so the next sign-in sets up a new authenticator app."""
+    if reset_totp and user.role != "owner":
+        raise AppError(
+            "TOTP_RESET_OWNER_ONLY", "Only the owner has 2-step sign-in to reset.", status_code=422
+        )
+    check_password_policy(new_password, name=user.name, mobile=user.mobile)
+
+    user.password_hash = hash_password(new_password)
+    user.must_change_password = True
+    user.password_changed_at = clock.utc_now()
+    user.failed_logins = 0
+    user.locked_until = None
+    if reset_totp:
+        user.totp_secret = None
+        user.totp_pending_secret = None
+        user.totp_confirmed_at = None
+        user.totp_last_step = None
+        session.execute(delete(RecoveryCode).where(RecoveryCode.user_id == user.id))
+    revoke_user_sessions(session, user.id, "password_reset")
+    session.flush()
+    write_audit(
+        session,
+        action="user.password_reset_cli",
+        entity_type="user",
+        entity_id=user.id,
+        actor_id=None,
+        after={
+            # Key names avoid "password"/"totp", which the audit redaction would mask.
+            "actor": CLI_ACTOR,
+            "forced_change": True,
+            "lockout_cleared": True,
+            "sessions_revoked": True,
+            "two_step_cleared": reset_totp,
+        },
+        reason="Account recovery command (server shell)",
+    )
+    return user
 
 
 def set_permissions(

@@ -48,6 +48,7 @@ for every checkout.
 .\scripts\check.ps1      # the gate: ruff, mypy, pytest, pip-audit, eslint, tsc, vitest, npm audit
 .\scripts\seed.ps1       # fake demo data into arms_dev (refuses APP_ENV=production)
 .\scripts\create-owner.ps1   # first run: create the owner account (prompts; no default password)
+.\scripts\reset-password.ps1  # account recovery (forgotten password or lockout); see docs/handover.md
 .\scripts\db-setup.ps1   # roles, databases, backend\.env; never changes existing role passwords
 .\scripts\db-setup.ps1 -DryRun           # show what it would do, change nothing
 .\scripts\db-setup.ps1 -RotatePasswords  # new role passwords (every checkout must update its .env)

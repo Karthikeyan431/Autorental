@@ -81,6 +81,7 @@ docs/        requirements, rules, data model, milestones
 .\scripts\check.ps1      # the gate: ruff, mypy, pytest, pip-audit, eslint, tsc, vitest, npm audit
 .\scripts\seed.ps1       # load fake demo data into the dev database (refuses APP_ENV=production); users need SEED_DEV_PASSWORD
 .\scripts\create-owner.ps1   # first run: create the single owner account (terminal prompts, no default password)
+.\scripts\reset-password.ps1  # account recovery: new password, unlock, sign out everywhere, forced change (-ResetTotp clears the owner's 2-step)
 cd backend; ..\.venv\Scripts\alembic upgrade head
 cd backend; ..\.venv\Scripts\python -m app.jobs.run_all   # scheduled jobs once (licence expiry)
 ```
