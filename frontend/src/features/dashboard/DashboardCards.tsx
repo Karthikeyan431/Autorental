@@ -3,7 +3,14 @@ import { Link } from 'react-router';
 import { strings } from '../../lib/strings';
 
 /** A card with a figure (`value`), or a placeholder naming the week that fills it in. */
-export type Card = { label: string; week: number; value?: number | null; to?: string };
+export type Card = {
+  label: string;
+  week: number;
+  value?: number | null;
+  to?: string;
+  /** The link text (default "Open the KYC queue"). */
+  linkLabel?: string;
+};
 
 export function DashboardCards({ cards }: { cards: Card[] }) {
   return (
@@ -24,7 +31,7 @@ export function DashboardCards({ cards }: { cards: Card[] }) {
             {live ? (
               card.to && (
                 <Link to={card.to} className="mt-1 inline-block text-xs text-teal-800 underline">
-                  {strings.dashboard.openQueue}
+                  {card.linkLabel ?? strings.dashboard.openQueue}
                 </Link>
               )
             ) : (

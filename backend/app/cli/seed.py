@@ -4,7 +4,8 @@
 
 Seeds the first settings version and, when SEED_DEV_PASSWORD is set, a fake owner and 2 fake
 staff (Week 2) who all use that password, and 5 fake drivers in different KYC states (Week 3).
-Week 4 adds autos. Never runs when APP_ENV=production. Safe to run more than once.
+and 5 fake autos with papers (Week 4; registration numbers XX00TT0001 to XX00TT0005: "XX" is
+not a state code). Never runs when APP_ENV=production. Safe to run more than once.
 
 Driver documents are images drawn here that say "DEMO - not a real document"; licence numbers
 look like TEST-DL-0001 and identity last-4 digits are 0001 to 0005.
@@ -37,6 +38,9 @@ from app.modules.settings.schemas import SettingsChanges
 from app.modules.settings.service import create_settings_version
 from app.modules.users.models import User
 from app.modules.users.service import create_owner, create_staff, granted_codes, owner_exists
+from app.modules.vehicles import service as vehicles_service
+from app.modules.vehicles.models import Vehicle
+from app.modules.vehicles.schemas import MaintenanceCreate, StatusChange, VehicleCreate
 
 DEMO_SETTINGS = SettingsChanges(
     rent_due_time=time(10, 0),  # demo value from the worked example in rent-and-payments.md
@@ -270,6 +274,69 @@ def _seed_drivers(session: Session, settings: Settings) -> bool:
     return True
 
 
+# (n, insurance valid for N days, status). Auto 2's insurance is close, so an alert shows.
+DEMO_AUTOS: tuple[tuple[int, int, str], ...] = (
+    (1, 300, "available"),
+    (2, 10, "available"),
+    (3, 200, "available"),
+    (4, 365, "available"),
+    (5, 120, "maintenance"),
+)
+
+
+def _seed_autos(session: Session, settings: Settings) -> bool:
+    row = session.scalars(
+        select(User).where(User.mobile == f"+91{DEMO_STAFF[0]['mobile']}")
+    ).one_or_none()
+    if row is None:
+        return False  # the demo autos are registered by the demo staff (SEED_DEV_PASSWORD)
+    if session.scalar(select(exists().where(Vehicle.registration_number == "XX00TT0001"))):
+        return False
+    user = _as_current_user(session, row)
+    today = business_date()
+    for n, insurance_days, status in DEMO_AUTOS:
+        vehicle = vehicles_service.create_vehicle(
+            session,
+            user,
+            VehicleCreate(
+                registration_number=f"XX00TT{n:04d}",
+                make="DEMO Motors",
+                model="Test 3W",
+                year=2020 + n,
+                fuel_type="cng",
+                notes="DEMO auto, not a real vehicle",
+            ),
+            ip=None,
+        )
+        for kind, days in (("insurance", insurance_days), ("fitness", 400), ("permit", 700)):
+            vehicles_service.add_paper(
+                session,
+                settings,
+                user,
+                vehicle.id,
+                vehicles_service.PaperInput(
+                    kind=kind,
+                    number=f"DEMO-{kind.upper()}-{n:04d}",
+                    valid_from=today - timedelta(days=30),
+                    valid_until=today + timedelta(days=days),
+                ),
+                file=_demo_image(f"{kind} XX00TT{n:04d}") if kind == "insurance" else None,
+                ip=None,
+            )
+        if status == "maintenance":
+            vehicles_service.add_maintenance(
+                session,
+                user,
+                vehicle.id,
+                MaintenanceCreate(started_on=today, description="DEMO service", cost_paise=150000),
+                ip=None,
+            )
+            vehicles_service.change_status(
+                session, user, vehicle.id, StatusChange(status="maintenance"), ip=None
+            )
+    return True
+
+
 def seed(session: Session, settings: Settings) -> bool:
     """Seed into the caller's transaction. Returns True if anything was inserted."""
     if settings.is_production:
@@ -282,6 +349,7 @@ def seed(session: Session, settings: Settings) -> bool:
             created = _seed_users(session, password) or created
         except AppError as exc:  # e.g. the password contains a demo user's name
             raise SeedRefusedError(f"SEED_DEV_PASSWORD is not acceptable: {exc.message}") from exc
+    created = _seed_autos(session, settings) or created
     return _seed_drivers(session, settings) or created
 
 
@@ -300,7 +368,7 @@ def main() -> int:
     finally:
         engine.dispose()
     print(
-        "Seeded the first settings version, demo users and demo drivers."
+        "Seeded the first settings version, demo users, drivers and autos."
         if created
         else "Seed data already present."
     )

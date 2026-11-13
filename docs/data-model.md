@@ -33,16 +33,16 @@ Conventions:
 | kyc_events | kyc_check_id, from_status, to_status, actor_id (NULL = a job), at, reason | Insert-only history |
 | identity_details | kyc_check_id, document_type (`masked_aadhaar` / `voter_id` / `passport`, N12), id_last4 (CHECK: exactly 4 digits), name_on_document, dob_or_yob, gender, qr_signature_valid (bool, nullable), photo_match_confirmed_by | **Never** a full Aadhaar number. No QR payload or address stored unless the legal adviser approves (N13) |
 | licence_details | kyc_check_id, driver_id, licence_number *(enc)*, licence_number_hash (keyed HMAC with `LOOKUP_HMAC_KEY`; one licence per driver: exclusion constraint on `(licence_number_hash =, driver_id <>)`, D37), licence_number_last4, name_on_licence, date_of_birth *(enc, ISO text; from Week 4, D46)*, issue_date, valid_until_non_transport, valid_until_transport, vehicle_classes (text[]), issuing_authority, lookup_status_text, looked_up_at, lookup_screenshot_document_id | Validity drives eligibility and alerts |
-| documents | owner_type, owner_id, doc_type (`driver_photo`, `id_front`, `id_back`, `licence_front`, `licence_back`; Week 4 adds `lookup_screenshot`, `attestation_screenshot`), storage_key, sha256, mime_type, size_bytes, key_id, uploaded_by, uploaded_at, retention_until, purged_at | Encrypted files on disk outside the web root; served only through an authenticated, audited endpoint |
+| documents | owner_type, owner_id, doc_type (`driver_photo`, `id_front`, `id_back`, `licence_front`, `licence_back`; Week 4 adds `lookup_screenshot`, `attestation_screenshot` and `vehicle_paper`; owner_type `driver` / `kyc_check` / `vehicle`), storage_key, sha256, mime_type, size_bytes, key_id, uploaded_by, uploaded_at, retention_until, purged_at | Encrypted files on disk outside the web root; served only through an authenticated, audited endpoint |
 | document_access_log | document_id, user_id, at, ip, purpose (`view` / `download`) | Insert-only. Every view or download |
 
 ## Autos
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| vehicles | registration_number (unique, normalised), make, model, year, fuel_type, status (`available` / `rented` / `maintenance` / `inactive`), notes | Only the agreements service sets `rented` and back. Ending an agreement sets `available` at once; the `[]` exclusion constraint and the eligibility check stop a new agreement starting on the return day (Q1), and the UI shows "available from <return day + 1>" |
-| vehicle_compliance | vehicle_id, kind (`insurance` / `fitness` / `permit` / `pollution`, Q29), number, valid_from, valid_until, document_id | Expiry alerts |
-| maintenance_records | vehicle_id, started_on, ended_on, description, cost_paise, recorded_by | |
+| vehicles | registration_number (unique, normalised: upper-case letters and digits, 4 to 12), make, model, year (1980 to 2100), fuel_type (`cng` / `lpg` / `petrol` / `diesel` / `electric`), status (`available` / `rented` / `maintenance` / `inactive`), notes, created_by | Only the agreements service sets `rented` and back. Ending an agreement sets `available` at once; the `[]` exclusion constraint and the eligibility check stop a new agreement starting on the return day (Q1), and the UI shows "available from <return day + 1>" |
+| vehicle_compliance | vehicle_id, kind (`insurance` / `fitness` / `permit` / `pollution`, Q29), number, valid_from, valid_until (valid_from <= valid_until), document_id, recorded_by | Every paper is kept; the latest `valid_until` of each kind is current. Insurance, fitness and permit raise `vehicle_paper_expiring` / `vehicle_paper_expired` alerts within `vehicle_alert_days` (Q29), on save and from the daily job; inactive autos are skipped |
+| maintenance_records | vehicle_id, started_on, ended_on (>= started_on), description, cost_paise (>= 0), recorded_by | |
 
 ## Agreements and rent
 

@@ -5,6 +5,7 @@ import AuditLogPage from '../features/audit/AuditLogPage';
 import type { Role, User } from '../features/auth/api';
 import ChangePasswordPage from '../features/auth/ChangePasswordPage';
 import SignInPage from '../features/auth/SignInPage';
+import AutoDetailPage from '../features/autos/AutoDetailPage';
 import AutosPage from '../features/autos/AutosPage';
 import BankStatementsPage from '../features/bank-statements/BankStatementsPage';
 import OwnerDashboardPage from '../features/dashboard/OwnerDashboardPage';
@@ -125,6 +126,15 @@ export const APP_PAGES: AppPage[] = [
     week: 4,
     Component: AutosPage,
     inNav: true,
+    group: 'fleet',
+    inShell: true,
+  },
+  {
+    path: '/autos/:id',
+    title: p.auto,
+    week: 4,
+    Component: AutoDetailPage,
+    inNav: false,
     group: 'fleet',
     inShell: true,
   },

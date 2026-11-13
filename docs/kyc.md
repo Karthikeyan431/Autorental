@@ -94,7 +94,7 @@ def check_eligibility(driver, on_date) -> Eligibility:
 ## Alerts
 
 - Licence expiring within `licence_alert_days` (30) and on the expiry date: alert the owner and the manager; no automatic action (Q23). Week 3: the job `python -m app.jobs.run_all` raises `licence_expiring` and `licence_expired` alerts (deduplicated) and marks the check `expired`; they show in the KYC queue's Expiring tab and on the dashboard. Per-user notifications come in Week 7 (D35).
-- Vehicle papers expiring within `vehicle_alert_days`.
+- Vehicle papers expiring within `vehicle_alert_days` (insurance, fitness and permit, Q29): `vehicle_paper_expiring` and `vehicle_paper_expired` alerts, raised when a paper is saved and by `run_all` (Week 4).
 
 ## Documents (all KYC files, photos, screenshots, signed agreements, statements)
 

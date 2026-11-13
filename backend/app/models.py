@@ -12,6 +12,7 @@ from app.modules.drivers.models import Consent, Driver, DriverManagerHistory, Dr
 from app.modules.kyc.models import IdentityDetails, KycCheck, KycEvent, LicenceDetails
 from app.modules.settings.models import SettingsVersion
 from app.modules.users.models import User, UserPermission
+from app.modules.vehicles.models import MaintenanceRecord, Vehicle, VehicleCompliance
 
 __all__ = [
     "Alert",
@@ -28,8 +29,11 @@ __all__ = [
     "KycEvent",
     "LicenceDetails",
     "LoginAttempt",
+    "MaintenanceRecord",
     "RecoveryCode",
     "SettingsVersion",
     "User",
     "UserPermission",
+    "Vehicle",
+    "VehicleCompliance",
 ]

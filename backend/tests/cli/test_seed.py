@@ -19,6 +19,7 @@ from app.modules.kyc.models import KycCheck, LicenceDetails
 from app.modules.settings.models import SettingsVersion
 from app.modules.users.models import User
 from app.modules.users.service import create_owner
+from app.modules.vehicles.models import Vehicle
 from tests.helpers import make_settings
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -177,6 +178,19 @@ def test_seed_adds_five_obviously_fake_drivers(owner_db: Session, tmp_path: Path
     # Safe to run again: nothing is duplicated.
     assert seed(owner_db, _dev(tmp_path, SEED_DEV_PASSWORD=SEED_PASSWORD)) is False
     assert owner_db.scalar(select(func.count()).select_from(Driver)) == 5
+
+
+def test_seed_adds_five_obviously_fake_autos(owner_db: Session, tmp_path: Path) -> None:
+    """Week 4: "XX" is not a state code, so these can never be real registrations."""
+    owner_db.execute(text("TRUNCATE users RESTART IDENTITY CASCADE"))
+    seed(owner_db, _dev(tmp_path, SEED_DEV_PASSWORD=SEED_PASSWORD))
+    autos = owner_db.scalars(select(Vehicle).order_by(Vehicle.registration_number)).all()
+    assert [v.registration_number for v in autos] == [f"XX00TT{n:04d}" for n in range(1, 6)]
+    assert all("DEMO" in v.make for v in autos)
+    assert {v.status for v in autos} <= {"available", "maintenance"}
+
+    seed(owner_db, _dev(tmp_path, SEED_DEV_PASSWORD=SEED_PASSWORD))
+    assert owner_db.scalar(select(func.count()).select_from(Vehicle)) == 5
 
 
 def test_seed_skips_drivers_without_staff(owner_db: Session, tmp_path: Path) -> None:

@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.core.db import make_engine, make_sessionmaker
 from app.core.time import business_date
 from app.jobs.licence_expiry import run_licence_expiry
+from app.jobs.vehicle_papers import run_vehicle_papers
 from app.modules.settings.schemas import SettingsValues
 from app.modules.settings.service import get_current_settings
 
@@ -34,6 +35,15 @@ def main() -> int:
             f"licence-expiry {today.isoformat()}: {result.expired} expired, "
             f"{result.alerts_created} alerts"
         )
+        with make_sessionmaker(engine)() as session, session.begin():
+            current = get_current_settings(session)
+            vehicle_days = (
+                current.vehicle_alert_days
+                if current is not None
+                else SettingsValues.model_fields["vehicle_alert_days"].default
+            )
+            papers = run_vehicle_papers(session, today, alert_days=vehicle_days)
+        print(f"vehicle-papers {today.isoformat()}: {papers.alerts_created} alerts")
     finally:
         engine.dispose()
     return 0

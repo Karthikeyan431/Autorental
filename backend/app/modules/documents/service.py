@@ -62,10 +62,13 @@ def document_driver(session: Session, document: Document) -> Driver | None:
 
 def get_visible_document(session: Session, user: CurrentUser, document_id: int) -> Document:
     """The document if this user may see it, else 404 (never 403: docs/security.md). Driver
-    photos: every signed-in user (N1). KYC documents: the owner and the current manager (D46)."""
+    photos and vehicle papers: every signed-in user (N1). KYC documents: the owner and the
+    current manager (D46)."""
     document = session.get(Document, document_id)
     if document is None or document.purged_at is not None:
         raise not_found()
+    if document.owner_type == "vehicle":
+        return document  # vehicle papers hold no personal data: every signed-in user
     driver = document_driver(session, document)
     if driver is None:
         raise not_found()

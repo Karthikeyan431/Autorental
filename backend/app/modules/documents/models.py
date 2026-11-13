@@ -20,8 +20,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base, CreatedAtMixin, TimestampMixin
 
-OWNER_TYPES = ("driver", "kyc_check")
-# driver_photo belongs to a driver; the others to a KYC attempt (screenshots: Week 4, 0005).
+OWNER_TYPES = ("driver", "kyc_check", "vehicle")
+# driver_photo belongs to a driver, vehicle_paper to a vehicle (0006); the others to a KYC attempt
+# (screenshots: Week 4, 0005).
 DOC_TYPES = (
     "driver_photo",
     "id_front",
@@ -30,6 +31,7 @@ DOC_TYPES = (
     "licence_back",
     "lookup_screenshot",
     "attestation_screenshot",
+    "vehicle_paper",
 )
 MIME_TYPES = ("image/jpeg", "image/png", "application/pdf")
 ACCESS_PURPOSES = ("view", "download")

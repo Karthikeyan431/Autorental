@@ -25,6 +25,7 @@ from app.modules.kyc.router import router as kyc_router
 from app.modules.kyc.service import count_simulated_current_checks
 from app.modules.settings.router import router as settings_router
 from app.modules.users.router import router as users_router
+from app.modules.vehicles.router import router as vehicles_router
 from app.version import __version__
 
 API_PREFIX = "/api/v1"
@@ -92,6 +93,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         drivers_router,
         kyc_router,
         documents_router,
+        vehicles_router,
     ):
         app.include_router(router, prefix=API_PREFIX)
     return app
