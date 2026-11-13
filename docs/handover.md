@@ -7,12 +7,14 @@ adding staff, free-tier risks).
 
 The production `backend/.env` holds keys that are **not** inside the database backups. Keep a
 copy of each in the owner's password manager or a sealed offline copy, separate from the data
-backups (`docs/deployment.md`, "Backups"):
+backups (`docs/deployment.md`, "Backups"). Never store a key in the same place as the database
+backups: a backup with its key beside it can be read by anyone who gets the backup. The backup
+setup itself comes in Week 8:
 
 | Key | Why it matters | Rotation |
 | --- | --- | --- |
 | `SECRET_KEY` | Signs sign-in tokens | Rotating signs everyone out |
-| `FIELD_ENCRYPTION_KEY`, `FIELD_ENCRYPTION_KEY_ID` | Decrypts licence numbers and the owner's TOTP secret | Add a new key id; old ids must stay available |
+| `FIELD_ENCRYPTION_KEY`, `FIELD_ENCRYPTION_KEY_ID` | Decrypts licence numbers, drivers' addresses and dates of birth, the date of birth on each licence (from Week 4, D46) and the owner's TOTP secret. **Losing it makes all of these unreadable**, even with a good database backup | Add a new key id; old ids must stay available |
 | `FILE_ENCRYPTION_KEYS`, `ACTIVE_FILE_KEY_ID` | Decrypts every stored document and photo | Add a new key id; old ids must stay available |
 | `LOOKUP_HMAC_KEY` | Duplicate checks for licence numbers | **Never rotate.** Losing or changing it breaks duplicate detection for every stored licence number (D36) |
 

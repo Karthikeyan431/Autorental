@@ -4,7 +4,7 @@
 
 **Not this week (D48):** the in-app Secure QR decoder (`uidai_qr`). It moves to a later milestone, after the legal adviser answers N13.
 
-**Read first:** `docs/kyc.md` (identity method b, licence method a), `docs/data-model.md` (autos, identity and licence details), `docs/business-rules.md` (rules 8, 2), `docs/open-questions.md` (N13, Q25, Q29, N15 to N19), `docs/decisions.md` (D45 to D48), `docs/requirements.md` section 3 (masked identity fields).
+**Read first:** `docs/kyc.md` (identity method b, licence method a), `docs/data-model.md` (autos, identity and licence details), `docs/business-rules.md` (rules 8, 2), `docs/open-questions.md` (N13, Q25, Q29, N15 to N20), `docs/decisions.md` (D45 to D49), `docs/requirements.md` section 3 (masked identity fields).
 
 ## Build
 
@@ -55,6 +55,11 @@
   current manager only. Others get 404 for document content (as before) and 403
   `KYC_DECIDE_NOT_ALLOWED` for a decision; their KYC queue shows only drivers they manage. If a
   manager is away, the owner changes the manager.
+- **KYC capture (D49):** consent, attempts, details, uploads and submit are also for the owner
+  and the current manager only (others get 403 `DRIVER_NOT_EDITABLE`). The staff member who
+  registers a driver is its manager from the start, so the wizard works end to end.
+- **Audit and history (D49):** audit entries, `kyc_events`, the timeline and the Activity tab
+  never hold a masked value, only the field name.
 - **Error codes (D46, D47):** keep the names `KYC_DECIDE_NOT_ALLOWED` and `FIELD_NOT_EDITABLE`
   (both 403); add them to the error table in `docs/api.md` with `REVEAL_NOT_ALLOWED` and
   `REVEAL_RATE_LIMITED`.
@@ -116,7 +121,8 @@ Agreements, rent and payments. The in-app Secure QR decoder and signature verifi
   edit the other fields and get 403 `FIELD_NOT_EDITABLE` for a masked one; a blank masked
   field keeps the current value;
 - the database row holds ciphertext for the address and both dates of birth (assert on the raw
-  row: the plain value is not in it), and the age check still works;
+  row: the plain value is not in it), and the date of birth must still be in the past (N20: no
+  minimum age; the valid licence is the age check);
 - the rate limit is the setting `reveal_limit_per_hour` (default 30).
 - Frontend: values are masked by default; "Show" appears only for the owner and the current
   manager; the revealed value disappears after leaving the screen.

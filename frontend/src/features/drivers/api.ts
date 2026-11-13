@@ -20,8 +20,10 @@ export type Driver = {
   full_name: string;
   mobile: string;
   alt_mobile: string | null;
-  address: string;
-  date_of_birth: string;
+  /** The address and date of birth are never sent; "Show" calls revealField (D45). */
+  masked_fields: string[];
+  /** The owner or the current manager: may reveal, open KYC documents and decide KYC (D46). */
+  can_reveal: boolean;
   emergency_name: string | null;
   emergency_mobile: string | null;
   photo_document_id: number | null;
@@ -56,8 +58,9 @@ export type DriverInput = {
   full_name: string;
   mobile: string;
   alt_mobile: string | null;
-  address: string;
-  date_of_birth: string;
+  /** On edit, null keeps the current value (N17). */
+  address: string | null;
+  date_of_birth: string | null;
   emergency_name: string | null;
   emergency_mobile: string | null;
   payment_rhythm: 'daily' | 'weekly';
@@ -137,6 +140,23 @@ export function fetchManagerHistory(id: number) {
 
 export function fetchTimeline(id: number) {
   return apiFetch<TimelineEntry[]>(`${BASE}/${id}/timeline`);
+}
+
+export type RevealField =
+  | 'address'
+  | 'date_of_birth'
+  | 'licence_number'
+  | 'licence_date_of_birth'
+  | 'id_dob_or_yob'
+  | 'id_gender';
+
+/** One masked value, for this view only. Never cached: the caller keeps it in component state. */
+export function revealField(driverId: number, field: RevealField, attemptId?: number) {
+  return apiFetch<{ field: RevealField; value: string }>(`${BASE}/${driverId}/reveal`, {
+    method: 'POST',
+    json: attemptId === undefined ? { field } : { field, attempt_id: attemptId },
+    cache: 'no-store',
+  });
 }
 
 export function fetchDocumentBlob(documentId: number) {

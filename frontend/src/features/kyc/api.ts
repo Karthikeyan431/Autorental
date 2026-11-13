@@ -20,18 +20,19 @@ export type DocumentMeta = {
 
 export type ChecklistItem = { key: string; label: string; required: boolean };
 
+/** The date or year of birth and gender are never sent; `masked_fields` names those set (D45). */
 export type IdentityDetails = {
   document_type: IdDocumentType;
   id_last4: string;
   name_on_document: string | null;
-  dob_or_yob: string | null;
-  gender: string | null;
+  masked_fields: string[];
 };
 
+/** The licence number shows its last 4 only; the date of birth is never sent (D45). */
 export type LicenceDetails = {
   licence_number_masked: string;
   name_on_licence: string | null;
-  date_of_birth: string | null;
+  masked_fields: string[];
   issue_date: string | null;
   valid_until_non_transport: string | null;
   valid_until_transport: string | null;
@@ -92,17 +93,23 @@ export type DriverKyc = {
   consents: Consent[];
   has_kyc_consent: boolean;
   accepted_id_types: IdDocumentType[];
+  can_reveal: boolean;
+  can_capture: boolean;
+  can_decide: boolean;
+  can_view_documents: boolean;
 };
 
 export type IdentityInput = {
   document_type: IdDocumentType;
   id_last4: string;
   name_on_document: string;
-  dob_or_yob: string;
+  /** null keeps the saved value (N17). */
+  dob_or_yob: string | null;
 };
 
 export type LicenceInput = {
-  licence_number: string;
+  /** null keeps the saved value (N17). */
+  licence_number: string | null;
   name_on_licence: string;
   date_of_birth: string | null;
   issue_date: string | null;

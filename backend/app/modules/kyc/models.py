@@ -145,7 +145,7 @@ class LicenceDetails(TimestampMixin, Base):
     licence_number_hash: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     licence_number_last4: Mapped[str] = mapped_column(Text, nullable=False)
     name_on_licence: Mapped[str | None] = mapped_column(Text)
-    date_of_birth: Mapped[date | None] = mapped_column(Date)
+    date_of_birth: Mapped[str | None] = mapped_column(Text)  # ISO date, encrypted (N15)
     issue_date: Mapped[date | None] = mapped_column(Date)
     valid_until_non_transport: Mapped[date | None] = mapped_column(Date)
     valid_until_transport: Mapped[date | None] = mapped_column(Date)

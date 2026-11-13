@@ -12,7 +12,10 @@ and an audit entry in the caller's transaction.
 * Approval needs every required checklist item ticked; the identity checklist includes "Only the
   last 4 digits of the Aadhaar number are visible".
 * Only the owner, the managing staff member and staff with drivers.edit_any see a driver's KYC;
-  everyone else gets 404 (app.modules.drivers.access).
+  everyone else gets 404. From Week 4 (D46), capture, documents and decisions are for the
+  owner and the current manager only (app.modules.drivers.access).
+* Masked values (licence number, dates of birth, gender) are never returned or audited; the
+  licence date of birth is encrypted at rest like the licence number (D45, D46).
 """
 
 from datetime import date, timedelta
@@ -42,11 +45,15 @@ from app.core.time import business_date, utc_now
 from app.modules.documents.models import Document
 from app.modules.documents.schemas import document_out
 from app.modules.documents.service import store_document
+from app.modules.drivers import pii
 from app.modules.drivers.access import (
+    can_capture_kyc,
+    can_decide_kyc,
+    is_owner_or_manager,
     not_found,
     require_kyc,
+    require_kyc_decide,
     require_kyc_edit,
-    sees_all_kyc,
 )
 from app.modules.drivers.models import Consent, Driver
 from app.modules.drivers.service import get_driver, user_refs
@@ -310,8 +317,14 @@ def attempts_out(session: Session, checks: list[KycCheck]) -> list[AttemptOut]:
                         document_type=idd.document_type,
                         id_last4=idd.id_last4,
                         name_on_document=idd.name_on_document,
-                        dob_or_yob=idd.dob_or_yob,
-                        gender=idd.gender,
+                        masked_fields=[
+                            name
+                            for name, value in (
+                                ("id_dob_or_yob", idd.dob_or_yob),
+                                ("id_gender", idd.gender),
+                            )
+                            if value
+                        ],
                     )
                     if idd is not None
                     else None
@@ -320,7 +333,8 @@ def attempts_out(session: Session, checks: list[KycCheck]) -> list[AttemptOut]:
                     LicenceDetailsOut(
                         licence_number_masked=_mask(lic.licence_number_last4),
                         name_on_licence=lic.name_on_licence,
-                        date_of_birth=lic.date_of_birth,
+                        masked_fields=["licence_number"]
+                        + (["licence_date_of_birth"] if lic.date_of_birth else []),
                         issue_date=lic.issue_date,
                         valid_until_non_transport=lic.valid_until_non_transport,
                         valid_until_transport=lic.valid_until_transport,
@@ -393,6 +407,10 @@ def driver_kyc(session: Session, user: CurrentUser, driver_id: int) -> DriverKyc
         consents=[consent_out(session, c) for c in consents],
         has_kyc_consent=_has_kyc_consent(session, driver.id),
         accepted_id_types=accepted_id_types(session),
+        can_reveal=is_owner_or_manager(user, driver),
+        can_capture=can_capture_kyc(user, driver),
+        can_decide=can_decide_kyc(user, driver),
+        can_view_documents=is_owner_or_manager(user, driver),
     )
 
 
@@ -573,11 +591,20 @@ def save_identity_details(
     details = session.scalars(
         select(IdentityDetails).where(IdentityDetails.kyc_check_id == check.id)
     ).one_or_none()
+    values = data.model_dump()
+    # Masked fields left blank keep the saved value (N17).
+    for key in ("dob_or_yob", "gender"):
+        if values[key] is None and details is not None:
+            values[key] = getattr(details, key)
+    if values["dob_or_yob"] is None:
+        raise AppError(
+            "FIELD_REQUIRED", "Enter the date or year of birth on the document.", status_code=422
+        )
     if details is None:
-        details = IdentityDetails(kyc_check_id=check.id, **data.model_dump())
+        details = IdentityDetails(kyc_check_id=check.id, **values)
         session.add(details)
     else:
-        for key, value in data.model_dump().items():
+        for key, value in values.items():
             setattr(details, key, value)
     session.flush()
     write_audit(
@@ -605,6 +632,22 @@ def save_licence_details(
     if check.check_type != "licence":
         raise AppError("WRONG_CHECK_TYPE", "This attempt is not a licence check.")
     _require_draft(check)
+    details = session.scalars(
+        select(LicenceDetails).where(LicenceDetails.kyc_check_id == check.id)
+    ).one_or_none()
+    values: dict[str, Any] = data.model_dump(exclude={"licence_number", "date_of_birth"})
+    values["driver_id"] = driver.id
+    # Masked fields left blank keep the saved value (N17).
+    if data.date_of_birth is not None:
+        values["date_of_birth"] = pii.encrypt_licence_dob(settings, driver.id, data.date_of_birth)
+    elif details is None:
+        values["date_of_birth"] = None
+    if data.licence_number is None:
+        if details is None:
+            raise AppError("FIELD_REQUIRED", "Enter the licence number.", status_code=422)
+        _store_licence_details(session, check, details, values)
+        _audit_licence_details(session, user, check, data, ip=ip)
+        return check
     try:
         number = normalise_licence_number(data.licence_number)
     except ValueError as exc:
@@ -629,18 +672,21 @@ def save_licence_details(
     if taken is not None:
         raise AppError("LICENCE_TAKEN", "This licence number is already registered to a driver.")
 
-    values: dict[str, Any] = data.model_dump(exclude={"licence_number"})
     values.update(
-        driver_id=driver.id,
         licence_number=field_cipher(settings).encrypt(
-            number, context=f"licence_details.licence_number:{driver.id}"
+            number, context=pii.licence_number_context(driver.id)
         ),
         licence_number_hash=number_hash,
         licence_number_last4=number[-4:],
     )
-    details = session.scalars(
-        select(LicenceDetails).where(LicenceDetails.kyc_check_id == check.id)
-    ).one_or_none()
+    _store_licence_details(session, check, details, values)
+    _audit_licence_details(session, user, check, data, ip=ip)
+    return check
+
+
+def _store_licence_details(
+    session: Session, check: KycCheck, details: LicenceDetails | None, values: dict[str, Any]
+) -> None:
     if details is None:
         session.add(LicenceDetails(kyc_check_id=check.id, **values))
     else:
@@ -655,6 +701,13 @@ def save_licence_details(
                 "LICENCE_TAKEN", "This licence number is already registered to a driver."
             ) from exc
         raise
+
+
+def _audit_licence_details(
+    session: Session, user: CurrentUser, check: KycCheck, data: LicenceDetailsIn, *, ip: str | None
+) -> None:
+    """Only visible fields (validity, classes) are recorded; never the licence number or the
+    date of birth (D45)."""
     write_audit(
         session,
         action="kyc.details_saved",
@@ -668,7 +721,6 @@ def save_licence_details(
         },
         ip=ip,
     )
-    return check
 
 
 def upload_attempt_document(
@@ -761,7 +813,8 @@ def decide_attempt(
     reason: str | None,
     ip: str | None,
 ) -> KycCheck:
-    check, _ = _attempt_and_driver(session, user, attempt_id, edit=False, lock=True)
+    check, driver = _attempt_and_driver(session, user, attempt_id, edit=False, lock=True)
+    require_kyc_decide(user, driver)
     if not check.is_current or check.status not in DECIDABLE_STATUSES:
         raise AppError(
             "KYC_INVALID_TRANSITION", "Only a submitted attempt can be approved or rejected."
@@ -974,7 +1027,8 @@ def _queue_subquery(session: Session, user: CurrentUser) -> Any:
             )
             .outerjoin(LicenceDetails, LicenceDetails.kyc_check_id == KycCheck.id)
         )
-        if not sees_all_kyc(user):
+        # D46: staff (edit_any included) see only the drivers they manage; the owner sees all.
+        if not user.is_owner:
             statement = statement.where(Driver.managed_by == user.id)
         selects.append(statement)
     return union_all(*selects).subquery("queue")

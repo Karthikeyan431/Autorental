@@ -45,6 +45,7 @@ class SettingsValues(BaseModel):
     weekly_pay_day: IsoWeekday = 1  # Monday
     escalation_suggest_after_days: NonNegativeInt = 1  # N9
     weekly_mdr_warning_paise: Paise = 200000  # N3: ₹2,000
+    reveal_limit_per_hour: Annotated[int, Field(strict=True, ge=1)] = 30  # N18
 
 
 class SettingsChanges(BaseModel):
@@ -70,6 +71,7 @@ class SettingsChanges(BaseModel):
     weekly_pay_day: IsoWeekday | None = None
     escalation_suggest_after_days: NonNegativeInt | None = None
     weekly_mdr_warning_paise: Paise | None = None
+    reveal_limit_per_hour: Annotated[int, Field(strict=True, ge=1)] | None = None
 
 
 class SettingsChangeRequest(SettingsChanges):

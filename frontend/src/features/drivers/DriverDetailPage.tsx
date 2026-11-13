@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 
+import { MaskedValue } from '../../components/MaskedValue';
 import { SecureImage } from '../../components/SecureDocument';
 import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
@@ -258,8 +259,19 @@ function DetailsTab({ driver }: { driver: Driver }) {
       <dl>
         <DetailRow label={t.mobile} value={driver.mobile} />
         <DetailRow label={t.altMobile} value={driver.alt_mobile} />
-        <DetailRow label={t.address} value={driver.address} />
-        <DetailRow label={t.dateOfBirth} value={formatDate(driver.date_of_birth)} />
+        <MaskedValue
+          driverId={driver.id}
+          field="address"
+          label={t.address}
+          canReveal={driver.can_reveal}
+        />
+        <MaskedValue
+          driverId={driver.id}
+          field="date_of_birth"
+          label={t.dateOfBirth}
+          canReveal={driver.can_reveal}
+          format={formatDate}
+        />
         <DetailRow label={t.emergencyName} value={driver.emergency_name} />
         <DetailRow label={t.emergencyMobile} value={driver.emergency_mobile} />
         <DetailRow
@@ -283,10 +295,12 @@ function DetailsTab({ driver }: { driver: Driver }) {
 function CheckCard({
   title,
   attempt,
+  manages,
   onChanged,
 }: {
   title: string;
   attempt: Attempt | null;
+  manages: boolean;
   onChanged: () => Promise<unknown>;
 }) {
   return (
@@ -304,9 +318,9 @@ function CheckCard({
       </div>
       {attempt ? (
         <>
-          <AttemptDetails attempt={attempt} />
-          <AttemptDocuments attempt={attempt} />
-          <DecisionPanel attempt={attempt} onChanged={onChanged} />
+          <AttemptDetails attempt={attempt} canReveal={manages} />
+          <AttemptDocuments attempt={attempt} canView={manages} />
+          <DecisionPanel attempt={attempt} canDecide={manages} onChanged={onChanged} />
         </>
       ) : null}
     </div>
@@ -337,7 +351,7 @@ function KycTab({ driver }: { driver: Driver }) {
   return (
     <div className="flex flex-col gap-4">
       <EligibilityPanel driverId={driver.id} />
-      {!done && driver.can_edit && (
+      {!done && data.can_capture && (
         <div>
           <Link
             to={`/drivers/new?driver=${driver.id}`}
@@ -347,8 +361,18 @@ function KycTab({ driver }: { driver: Driver }) {
           </Link>
         </div>
       )}
-      <CheckCard title={t.identity} attempt={data.identity} onChanged={refresh} />
-      <CheckCard title={t.licence} attempt={data.licence} onChanged={refresh} />
+      <CheckCard
+        title={t.identity}
+        attempt={data.identity}
+        manages={driver.can_reveal}
+        onChanged={refresh}
+      />
+      <CheckCard
+        title={t.licence}
+        attempt={data.licence}
+        manages={driver.can_reveal}
+        onChanged={refresh}
+      />
       {earlier.length > 0 && (
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="mb-2 text-lg font-semibold text-slate-900">{strings.kyc.history}</h2>

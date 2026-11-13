@@ -86,8 +86,9 @@ def eligible_driver(db: Session) -> Build:
         driver = Driver(
             full_name="Test Driver 001",
             mobile="+919000000001",
-            address="Test address",
-            date_of_birth=date(1990, 1, 1),
+            # Stored encrypted by the service (N15); this test never reads them.
+            address="test:not-decrypted-here",
+            date_of_birth="test:not-decrypted-here",
             account_status=status,
             created_by=staff.id,
             managed_by=staff.id,

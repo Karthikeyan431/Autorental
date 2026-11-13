@@ -120,7 +120,7 @@ def test_staff_can_edit_only_the_drivers_they_manage(api: TestClient, team: Team
 
     own = api.patch(url, json={"address": "Test address changed"}, headers=bearer(team.staff_a))
     assert own.status_code == 200, own.text
-    assert own.json()["address"] == "Test address changed"
+    assert "address" not in own.json()  # masked in every response (D45)
 
     other = api.patch(url, json={"address": "Not mine"}, headers=bearer(team.staff_b))
     assert other.status_code == 403
@@ -133,7 +133,10 @@ def test_staff_can_edit_only_the_drivers_they_manage(api: TestClient, team: Team
     assert owner.status_code == 200
 
 
-def test_drivers_edit_any_lets_staff_edit_every_driver(api: TestClient, team: Team) -> None:
+def test_drivers_edit_any_lets_staff_edit_every_driver_except_masked_fields(
+    api: TestClient, team: Team
+) -> None:
+    """D46 (N17) replaces the Week 3 rule: drivers.edit_any covers the unmasked fields only."""
     driver = create_driver(api, team.staff_a)
     grant = api.put(
         f"{API}/users/{team.staff_b_id}/permissions",
@@ -143,10 +146,17 @@ def test_drivers_edit_any_lets_staff_edit_every_driver(api: TestClient, team: Te
     assert grant.status_code == 200, grant.text
     response = api.patch(
         f"{API}/drivers/{driver['id']}",
-        json={"address": "Edited with edit_any"},
+        json={"emergency_name": "Test Contact 999"},
         headers=bearer(team.staff_b),
     )
     assert response.status_code == 200, response.text
+    masked = api.patch(
+        f"{API}/drivers/{driver['id']}",
+        json={"address": "Edited with edit_any"},
+        headers=bearer(team.staff_b),
+    )
+    assert masked.status_code == 403
+    assert error_code(masked) == "FIELD_NOT_EDITABLE"
 
 
 def test_a_duplicate_mobile_is_refused_in_any_format(api: TestClient, team: Team) -> None:

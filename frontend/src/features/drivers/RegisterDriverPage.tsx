@@ -207,7 +207,11 @@ function WizardStep({
                 >
                   {strings.drivers.review}
                 </Link>
-                <DecisionPanel attempt={attempt} onChanged={refresh} />
+                <DecisionPanel
+                  attempt={attempt}
+                  canDecide={driver.can_reveal}
+                  onChanged={refresh}
+                />
               </>
             ) : (
               <Button variant="secondary" onClick={() => go(checkType === 'identity' ? 3 : 4)}>

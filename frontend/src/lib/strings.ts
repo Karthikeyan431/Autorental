@@ -230,6 +230,7 @@ export const strings = {
     vehicleAlertDays: 'Vehicle papers alert (days before)',
     escalationSuggestAfterDays: 'Suggest an escalation after (days overdue)',
     staffLimit: 'Staff limit (active staff accounts)',
+    revealLimit: 'Masked values each person can show per hour',
     advanceAdjustmentsEnabled: 'Allow advance adjustments',
     refundsEnabled: 'Allow advance refunds',
     permittedLicenceClasses: 'Permitted licence classes (comma separated)',
@@ -357,6 +358,14 @@ export const strings = {
     addressRequired: 'Enter the address.',
     mobileInvalid: 'Enter a 10-digit Indian mobile number.',
     dobRequired: 'Enter the date of birth.',
+    masked: '••••••',
+    show: 'Show',
+    hide: 'Hide',
+    showField: (label: string) => `Show ${label.toLowerCase()}`,
+    hideField: (label: string) => `Hide ${label.toLowerCase()}`,
+    leaveBlank: 'Leave blank to keep the current value.',
+    maskedEditOwnerOnly:
+      "Only the owner or the driver's manager can change the address or date of birth.",
     actions: {
       'driver.created': 'Driver registered',
       'driver.updated': 'Details changed',
@@ -376,6 +385,8 @@ export const strings = {
       'kyc.reopened': 'KYC reopened by the owner',
       'kyc.expired': 'Licence expired',
       'document.viewed': 'Document viewed',
+      'driver.field_revealed': 'A masked value was shown',
+      'driver.reveal_rate_limited': 'Too many masked values shown in an hour',
     } as Record<string, string>,
   },
 
@@ -445,6 +456,13 @@ export const strings = {
     nameOnDocument: 'Name on the document',
     dobOrYob: 'Date or year of birth (YYYY or YYYY-MM-DD)',
     dobOrYobInvalid: 'Enter a year (1990) or a date (1990-01-31).',
+    dobOrYobRequired: 'Enter the date or year of birth.',
+    gender: 'Gender',
+    savedKeepBlank: 'Saved. Leave blank to keep the saved value.',
+    licenceNumberRequired: 'Enter the licence number.',
+    documentsManagerOnly:
+      "Only the owner or the driver's manager can open KYC documents (they show the masked values in full).",
+    decideManagerOnly: "Only the owner or the driver's manager can decide this check.",
     maskedWarning:
       'Upload a masked Aadhaar only: just the last 4 digits may be visible. If the full number shows, ask the driver for a masked copy.',
     idFront: 'ID front',

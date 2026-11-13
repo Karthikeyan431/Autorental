@@ -55,6 +55,8 @@ export default function KycReviewPage() {
     );
   }
   const data = attempt.data;
+  // The owner or the current manager (D45, D46): documents, "Show" and the decision.
+  const manages = driver.data?.can_reveal ?? false;
   const checkLabel = k.checkLabels[data.check_type] ?? data.check_type;
 
   const onChanged = async () => {
@@ -96,11 +98,11 @@ export default function KycReviewPage() {
       )}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-slate-200 bg-white p-4">
-          <AttemptDocuments attempt={data} />
+          <AttemptDocuments attempt={data} canView={manages} />
         </div>
         <div className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-4">
-          <AttemptDetails attempt={data} />
-          <DecisionPanel attempt={data} onChanged={onChanged} />
+          <AttemptDetails attempt={data} canReveal={manages} />
+          <DecisionPanel attempt={data} canDecide={manages} onChanged={onChanged} />
           <div>
             <h2 className="mb-1 text-sm font-semibold text-slate-900">{k.history}</h2>
             <AttemptHistory attempt={data} />

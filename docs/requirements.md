@@ -43,7 +43,7 @@ Owner-only actions cannot be granted to staff. "Grantable" means the owner can s
 | --- | --- | --- | --- |
 | Create, edit, deactivate staff; set permissions | Yes | No | Never |
 | Business settings: rent due time, business UPI ID and payee name, staff limit, WhatsApp template | Yes | No | Never |
-| Register a driver, take the photo, record consent, upload documents | Yes | Yes | n/a |
+| Register a driver, take the photo, record consent, upload documents. From Week 4: consent and KYC capture only for drivers they currently manage (D49) | Yes | Yes | n/a |
 | Verify identity and licence; approve, reject or ask again (N2). From Week 4: only for drivers they currently manage (N16) | Yes | Yes | n/a |
 | Reopen or overturn a verification | Yes | No | Never |
 | Change which staff member manages a driver | Yes | No | Never |

@@ -27,6 +27,11 @@ _PERSONAL_KEYS = frozenset(
         "date_of_birth",
         "dob",
         "dob_or_yob",
+        "gender",
+        # Masked identity fields under their reveal names (D45).
+        "licence_date_of_birth",
+        "id_dob_or_yob",
+        "id_gender",
         "ip",
         "user_agent",
     }

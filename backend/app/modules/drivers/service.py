@@ -2,16 +2,19 @@
 the activity timeline. Access rules live in app.modules.drivers.access.
 
 Audit entries never contain names, mobiles, addresses or dates of birth: only ids, codes,
-statuses and the names of the fields that changed.
+statuses and the names of the fields that changed. The address and date of birth are encrypted
+at rest and never returned except by `reveal_field` (D45, D46; app.modules.drivers.pii).
 """
 
 from collections.abc import Iterable
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import time as clock
 from app.core.audit import AuditLog, write_audit
 from app.core.config import Settings
 from app.core.errors import AppError
@@ -20,11 +23,15 @@ from app.core.permissions import CurrentUser
 from app.core.time import utc_now
 from app.modules.documents.models import Document
 from app.modules.documents.service import store_document
+from app.modules.drivers import pii
 from app.modules.drivers.access import (
     can_edit,
     can_see_kyc,
+    is_owner_or_manager,
     not_found,
     require_edit,
+    require_masked_edit,
+    require_reveal,
     sees_all_kyc,
 )
 from app.modules.drivers.models import (
@@ -43,7 +50,9 @@ from app.modules.drivers.schemas import (
     TimelineEntry,
     UserRef,
 )
-from app.modules.kyc.models import KycCheck
+from app.modules.kyc.models import IdentityDetails, KycCheck, LicenceDetails
+from app.modules.settings.schemas import SettingsValues
+from app.modules.settings.service import get_current_settings
 from app.modules.users.models import User
 
 PHOTO_MAX_SIDE = 1600
@@ -98,8 +107,8 @@ def driver_out(session: Session, user: CurrentUser, driver: Driver) -> DriverOut
         full_name=driver.full_name,
         mobile=driver.mobile,
         alt_mobile=driver.alt_mobile,
-        address=driver.address,
-        date_of_birth=driver.date_of_birth,
+        masked_fields=list(pii.DRIVER_FIELDS),
+        can_reveal=is_owner_or_manager(user, driver),
         emergency_name=driver.emergency_name,
         emergency_mobile=driver.emergency_mobile,
         photo_document_id=driver.photo_document_id,
@@ -143,12 +152,18 @@ def _flush_or_mobile_taken(session: Session) -> None:
 
 
 def create_driver(
-    session: Session, user: CurrentUser, data: DriverCreate, *, ip: str | None
+    session: Session, settings: Settings, user: CurrentUser, data: DriverCreate, *, ip: str | None
 ) -> Driver:
+    """The staff member who registers a driver is its manager from the start, so they can finish
+    the registration wizard (photo, consent, KYC capture and decision)."""
     _ensure_mobile_free(session, data.mobile)
     now = utc_now()
+    values = data.model_dump(exclude={"address", "date_of_birth"})
+    # The encryption context needs the row id, so the masked values are written after insert.
     driver = Driver(
-        **data.model_dump(),
+        **values,
+        address="",
+        date_of_birth="",
         created_by=user.id,
         managed_by=user.id,
         registered_at=now,
@@ -156,6 +171,11 @@ def create_driver(
     session.add(driver)
     _flush_or_mobile_taken(session)
     session.refresh(driver, ["code"])
+    driver.address = pii.encrypt_driver_field(settings, "address", driver.id, data.address)
+    driver.date_of_birth = pii.encrypt_date(
+        settings, "date_of_birth", driver.id, data.date_of_birth
+    )
+    session.flush()
     session.add(
         DriverManagerHistory(driver_id=driver.id, staff_id=user.id, from_at=now, changed_by=user.id)
     )
@@ -178,22 +198,41 @@ def create_driver(
 
 
 def update_driver(
-    session: Session, user: CurrentUser, driver_id: int, changes: DriverUpdate, *, ip: str | None
+    session: Session,
+    settings: Settings,
+    user: CurrentUser,
+    driver_id: int,
+    changes: DriverUpdate,
+    *,
+    ip: str | None,
 ) -> Driver:
     driver = get_driver(session, driver_id, lock=True)
     require_edit(user, driver)
     values = changes.model_dump(exclude_unset=True)
-    for required in ("full_name", "mobile", "address", "date_of_birth", "payment_rhythm"):
+    # Masked fields: blank or null keeps the current value (N17).
+    masked = {k: values.pop(k) for k in pii.DRIVER_FIELDS if k in values}
+    masked = {k: v for k, v in masked.items() if v is not None}
+    if masked:
+        require_masked_edit(user, driver)
+    for required in ("full_name", "mobile", "payment_rhythm"):
         if required in values and values[required] is None:
             raise AppError("FIELD_REQUIRED", f"{required} cannot be empty.", status_code=422)
     changed = sorted(k for k, v in values.items() if getattr(driver, k) != v)
-    if not changed:
+    masked_changed = sorted(
+        k
+        for k, v in masked.items()
+        if pii.decrypt_driver_field(settings, k, driver.id, getattr(driver, k)) != _text(v)
+    )
+    if not changed and not masked_changed:
         return driver
     if "mobile" in changed:
         _ensure_mobile_free(session, values["mobile"], exclude_id=driver.id)
     before_rhythm = driver.payment_rhythm
     for key in changed:
         setattr(driver, key, values[key])
+    for key in masked_changed:
+        setattr(driver, key, pii.encrypt_driver_field(settings, key, driver.id, _text(masked[key])))
+    changed = sorted(changed + masked_changed)
     _flush_or_mobile_taken(session)
     audit_after: dict[str, Any] = {"fields": changed}
     audit_before: dict[str, Any] | None = None
@@ -211,6 +250,139 @@ def update_driver(
         ip=ip,
     )
     return driver
+
+
+def _text(value: Any) -> str:
+    """Masked values are stored as text: dates in ISO form."""
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
+# --- Reveal (D45, N18) ----------------------------------------------------------------------------
+
+REVEAL_WINDOW = timedelta(hours=1)
+
+
+def _reveal_limit(session: Session) -> int:
+    current = get_current_settings(session)
+    if current is not None:
+        return current.reveal_limit_per_hour
+    default: int = SettingsValues.model_fields["reveal_limit_per_hour"].default
+    return default
+
+
+def _recent_entries(session: Session, actor_id: int, action: str, since: datetime) -> int:
+    return (
+        session.scalar(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(
+                AuditLog.actor_id == actor_id,
+                AuditLog.action == action,
+                AuditLog.occurred_at >= since,
+            )
+        )
+        or 0
+    )
+
+
+def _kyc_attempt(
+    session: Session, driver: Driver, check_type: str, attempt_id: int | None
+) -> KycCheck | None:
+    statement = select(KycCheck).where(
+        KycCheck.driver_id == driver.id, KycCheck.check_type == check_type
+    )
+    if attempt_id is None:
+        statement = statement.where(KycCheck.is_current)
+    else:
+        statement = statement.where(KycCheck.id == attempt_id)
+    return session.scalars(statement).one_or_none()
+
+
+def _masked_value(
+    session: Session, settings: Settings, driver: Driver, field: str, attempt_id: int | None
+) -> str | None:
+    if field in pii.DRIVER_FIELDS:
+        stored: str = getattr(driver, field)
+        return pii.decrypt_driver_field(settings, field, driver.id, stored)
+    if field in pii.LICENCE_FIELDS:
+        check = _kyc_attempt(session, driver, "licence", attempt_id)
+        if check is None:
+            return None
+        licence = session.scalars(
+            select(LicenceDetails).where(LicenceDetails.kyc_check_id == check.id)
+        ).one_or_none()
+        if licence is None:
+            return None
+        if field == "licence_number":
+            return pii.decrypt_licence_number(settings, driver.id, licence.licence_number)
+        if licence.date_of_birth is None:
+            return None
+        return pii.decrypt_licence_dob(settings, driver.id, licence.date_of_birth)
+    check = _kyc_attempt(session, driver, "identity", attempt_id)
+    if check is None:
+        return None
+    identity = session.scalars(
+        select(IdentityDetails).where(IdentityDetails.kyc_check_id == check.id)
+    ).one_or_none()
+    if identity is None:
+        return None
+    return identity.dob_or_yob if field == "id_dob_or_yob" else identity.gender
+
+
+def reveal_field(
+    session: Session,
+    settings: Settings,
+    user: CurrentUser,
+    driver_id: int,
+    *,
+    field: str,
+    attempt_id: int | None,
+    ip: str | None,
+) -> str:
+    """The full value of one masked field, for the owner or the current manager only.
+
+    Writes one `driver.field_revealed` audit entry (field name, never the value). Over the
+    per-user hourly limit the reply is 429 REVEAL_RATE_LIMITED, and one
+    `driver.reveal_rate_limited` entry is kept per user per hour.
+    """
+    driver = get_driver(session, driver_id)
+    require_reveal(user, driver)
+    if field not in pii.REVEALABLE_FIELDS:
+        raise not_found()
+    since = clock.utc_now() - REVEAL_WINDOW
+    if _recent_entries(session, user.id, "driver.field_revealed", since) >= _reveal_limit(session):
+        if _recent_entries(session, user.id, "driver.reveal_rate_limited", since) == 0:
+            write_audit(
+                session,
+                action="driver.reveal_rate_limited",
+                entity_type="driver",
+                entity_id=driver.id,
+                actor_id=user.id,
+                after={"field": field},
+                ip=ip,
+            )
+        raise AppError(
+            "REVEAL_RATE_LIMITED",
+            "Too many values shown in the last hour. Please try again later.",
+            status_code=429,
+            keep_changes=True,
+        )
+    value = _masked_value(session, settings, driver, field, attempt_id)
+    if value is None:
+        raise not_found()
+    after: dict[str, Any] = {"field": field}
+    if attempt_id is not None:
+        after["attempt_id"] = attempt_id
+    write_audit(
+        session,
+        action="driver.field_revealed",
+        entity_type="driver",
+        entity_id=driver.id,
+        actor_id=user.id,
+        after=after,
+        ip=ip,
+    )
+    return value
 
 
 def set_photo(

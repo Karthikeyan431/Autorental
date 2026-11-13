@@ -228,6 +228,7 @@ def _seed_drivers(session: Session, settings: Settings) -> bool:
         user = staff[manager]
         driver = drivers_service.create_driver(
             session,
+            settings,
             user,
             DriverCreate(
                 full_name=f"Test Driver {n:03d} (DEMO)",

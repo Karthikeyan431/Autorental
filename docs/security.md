@@ -22,11 +22,13 @@ Target: OWASP ASVS level 1 at launch. The app holds identity documents and money
 ## Data protection
 
 - Never store a full Aadhaar number (see `kyc.md`).
-- Encrypt licence numbers and the owner's TOTP secret at application level (AES-256-GCM, `cryptography`). Keys come from the environment, with key rotation through `key_id`.
+- Encrypt licence numbers, the driver's address and date of birth, the date of birth on the licence (from Week 4, D46) and the owner's TOTP secret at application level (AES-256-GCM, `cryptography`). Keys come from the environment, with key rotation through `key_id`.
+- **Back up `FIELD_ENCRYPTION_KEY` separately from the database backups.** Without it, every encrypted field (licence numbers, addresses, dates of birth, the owner's TOTP secret) is unreadable, even with a perfect database backup. A key stored with the backups would let anyone holding a backup read those fields. The backup setup comes in Week 8 (`handover.md`, `deployment.md`).
 - Licence-number duplicate checks use HMAC-SHA256 with `LOOKUP_HMAC_KEY`, never a plain hash. This key is never rotated; back it up with the other keys (D36).
 - No field accepts a 12-digit (Aadhaar-like) number: identity fields, names, addresses and reasons all refuse it.
 - Documents are encrypted on disk, served only through the audited endpoint, and never given public URLs.
 - Logs never contain names, mobiles, Aadhaar or licence numbers, addresses, tokens or passwords. Log user ids and request ids.
+- Audit entries, KYC history and the activity timeline never hold a masked value (address, dates of birth, licence number, the ID document's date or year of birth, gender): only which field changed or was revealed (D49). `audit_logs` is insert-only, so a value written there could never be removed.
 - Consent is recorded before KYC. Build to the DPDP Rules 2025 now: their main obligations apply from 13 May 2027.
 
 ## Audit log

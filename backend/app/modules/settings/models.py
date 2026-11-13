@@ -39,6 +39,7 @@ class SettingsVersion(CreatedAtMixin, Base):
             "escalation_suggest_after_days >= 0", name="escalation_suggest_non_negative"
         ),
         CheckConstraint("weekly_mdr_warning_paise >= 0", name="mdr_warning_non_negative"),
+        CheckConstraint("reveal_limit_per_hour >= 1", name="reveal_limit_positive"),
         Index("ix_settings_versions_effective_from", "effective_from"),
     )
 
@@ -72,6 +73,7 @@ class SettingsVersion(CreatedAtMixin, Base):
     escalation_suggest_after_days: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="1"
     )
+    reveal_limit_per_hour: Mapped[int] = mapped_column(Integer, nullable=False, server_default="30")
     weekly_mdr_warning_paise: Mapped[int] = mapped_column(
         BigInteger, nullable=False, server_default="200000"
     )
