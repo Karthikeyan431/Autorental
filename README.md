@@ -44,9 +44,11 @@ for every checkout.
 
 ```powershell
 .\scripts\dev.ps1        # API on :8000 (own window) + web app on http://127.0.0.1:5173
+.\scripts\dev.ps1 -Lan   # phone testing on your home Wi-Fi (development only; see below)
 .\scripts\check.ps1      # the gate: ruff, mypy, pytest, pip-audit, eslint, tsc, vitest, npm audit
 .\scripts\seed.ps1       # fake demo data into arms_dev (refuses APP_ENV=production)
 .\scripts\create-owner.ps1   # first run: create the owner account (prompts; no default password)
+.\scripts\reset-password.ps1  # account recovery (forgotten password or lockout); see docs/handover.md
 .\scripts\db-setup.ps1   # roles, databases, backend\.env; never changes existing role passwords
 .\scripts\db-setup.ps1 -DryRun           # show what it would do, change nothing
 .\scripts\db-setup.ps1 -RotatePasswords  # new role passwords (every checkout must update its .env)
@@ -66,6 +68,25 @@ If PowerShell blocks scripts, run them as
 - Web app: http://127.0.0.1:5173 (resize to phone width; staff mostly use phones).
 - Health: http://127.0.0.1:8000/api/v1/health returns `{"status":"ok","db":"ok",...}`.
 - API docs (development only): http://127.0.0.1:8000/api/v1/docs
+- Demo drivers: with `SEED_DEV_PASSWORD` set, `.\scripts\seed.ps1` also adds Test Driver 001-005
+  (DEMO) in different KYC states. If it asks for `LOOKUP_HMAC_KEY`, run `.\scripts\db-setup.ps1`
+  once: it adds that key to an existing `backend\.env` without changing anything else.
+- Licence expiry job (by hand): `cd backend; ..\.venv\Scripts\python -m app.jobs.run_all`.
+
+#### Phone testing over Wi-Fi (development only)
+
+1. Make your Wi-Fi a **Private** network (Settings > Network & internet > Wi-Fi > your network >
+   Private). Check with `Get-NetConnectionProfile`.
+2. Allow port 5173 on Private networks only, once, in an **Administrator** PowerShell:
+   `New-NetFirewallRule -DisplayName 'ARMS dev (Vite 5173, Private)' -Direction Inbound -Protocol TCP -LocalPort 5173 -Action Allow -Profile Private`
+3. Run `.\scripts\dev.ps1 -Lan` and open the printed **`https://<your-pc-ip>:5173`** on the
+   phone (note **https**). Vite serves HTTPS with a self-signed certificate made on this PC, so
+   the phone gets a secure context: sign-in cookies, "Take photo", the live camera and Web
+   Locks all work. The first time, the phone warns that the connection is not private; accept
+   it once (`docs/handover.md`, "Phone testing over Wi-Fi"). Opening `http://` instead shows an
+   "Open this app over HTTPS" banner.
+4. When you are done, remove the rule (Administrator PowerShell):
+   `Remove-NetFirewallRule -DisplayName 'ARMS dev (Vite 5173, Private)'`
 
 ### 5. Continuous integration
 

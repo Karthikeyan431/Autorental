@@ -17,6 +17,10 @@
 
   -RotatePasswords sets new random passwords on both roles and rewrites only the four database
   URL lines in backend\.env (other secrets are kept).
+
+  Keys added in later weeks are appended to an existing backend\.env when missing, and never
+  replaced once set: LOOKUP_HMAC_KEY (Week 3, licence-number duplicate checks; changing it would
+  break those checks, so back it up with the other keys).
   -DryRun prints the plan and changes nothing (no roles, databases, passwords or files).
 
   The superuser password comes from PGPASSWORD, or psql prompts for it. It is never written
@@ -153,6 +157,15 @@ switch ($envAction) {
 }
 Write-Plan 'make sure databases arms_dev and arms_test exist, owned by app_owner'
 
+# Keys introduced after Week 1: added when missing, never replaced (their values are never shown).
+$missingKeys = @()
+if ($envExists -and $envAction -ne 'write') {
+    $currentEnv = Get-Content -Raw -Path $EnvFile
+    if ($currentEnv -notmatch '(?m)^LOOKUP_HMAC_KEY=\S') { $missingKeys += 'LOOKUP_HMAC_KEY' }
+    $currentEnv = $null
+}
+foreach ($key in $missingKeys) { Write-Plan "add a new $key to $EnvFile (existing values are never replaced)" }
+
 if ($DryRun) {
     Write-Host 'Dry run: nothing was changed.'
     exit 0
@@ -197,6 +210,7 @@ if ($envAction -eq 'write') {
         "FIELD_ENCRYPTION_KEY=$(New-Base64Key)",
         "FILE_ENCRYPTION_KEYS=dev1:$(New-Base64Key)",
         'ACTIVE_FILE_KEY_ID=dev1',
+        "LOOKUP_HMAC_KEY=$(New-Base64Key)",
         'LOG_LEVEL=INFO',
         'AADHAAR_QR_INAPP_ENABLED=false',
         'DEMO_VERIFIER_ENABLED=false'
@@ -213,6 +227,20 @@ elseif ($envAction -eq 'rewrite-urls') {
 }
 else {
     Write-Host "Kept $EnvFile unchanged."
+}
+if ($missingKeys.Count -gt 0) {
+    $existingEnv = [System.IO.File]::ReadAllText($EnvFile)
+    $sep = if ($existingEnv.EndsWith("`n")) { '' } else { "`n" }
+    $added = @()
+    foreach ($key in $missingKeys) {
+        if ($key -eq 'LOOKUP_HMAC_KEY') {
+            $added += '# Week 3: licence-number duplicate checks. Never change it; back it up with the other keys.'
+            $added += "LOOKUP_HMAC_KEY=$(New-Base64Key)"
+        }
+    }
+    [System.IO.File]::WriteAllText($EnvFile, $existingEnv + $sep + (($added -join "`n") + "`n"), $utf8NoBom)
+    $existingEnv = $null; $added = $null
+    Write-Host "Added $($missingKeys -join ', ') to $EnvFile (values not shown)."
 }
 $passwords = $null; $ownerPw = $null; $userPw = $null
 

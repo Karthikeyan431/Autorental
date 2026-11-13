@@ -1,5 +1,6 @@
-"""Auth endpoints. The refresh token travels only in an httpOnly, Secure, SameSite=Strict cookie
-scoped to /api/v1/auth; a readable `arms_csrf` cookie is echoed in X-CSRF-Token on refresh."""
+r"""Auth endpoints. The refresh token travels only in an httpOnly, Secure, SameSite=Strict cookie
+scoped to /api/v1/auth; a readable `arms_csrf` cookie is echoed in X-CSRF-Token on refresh.
+Both are always Secure, in every environment (phone testing uses https: scripts\dev.ps1 -Lan)."""
 
 from typing import Annotated
 
@@ -67,7 +68,7 @@ def _clear_cookies(response: Response) -> None:
     response.delete_cookie(CSRF_COOKIE, path="/", secure=True, samesite="strict")
 
 
-def _signed_in(response: Response, result: service.SignInResult) -> SignedIn:
+def _signed_in(request: Request, response: Response, result: service.SignInResult) -> SignedIn:
     _set_cookies(response, result)
     return SignedIn(
         access_token=result.access_token, expires_in=result.expires_in, user=result.user
@@ -87,7 +88,7 @@ def login(
     )
     if isinstance(result, service.ChallengeResult):
         return ChallengeOut(status=result.status, challenge_token=result.challenge_token)  # type: ignore[arg-type]
-    return _signed_in(response, result)
+    return _signed_in(request, response, result)
 
 
 @router.post("/totp", response_model=SignedIn)
@@ -102,7 +103,7 @@ def totp(
         recovery_code=body.recovery_code,
         client=_client(request),
     )
-    return _signed_in(response, result)
+    return _signed_in(request, response, result)
 
 
 @router.post("/totp/setup", response_model=TotpSetupOut)
@@ -143,7 +144,7 @@ def refresh(request: Request, response: Response, session: DbSession, _: Public)
         csrf_header=request.headers.get(CSRF_HEADER),
         client=_client(request),
     )
-    return _signed_in(response, result)
+    return _signed_in(request, response, result)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

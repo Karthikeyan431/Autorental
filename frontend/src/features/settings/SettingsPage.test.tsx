@@ -17,6 +17,7 @@ const version = {
   licence_alert_days: 30,
   vehicle_alert_days: 30,
   permitted_licence_classes: [],
+  accepted_id_types: ['masked_aadhaar'],
   advance_adjustments_enabled: true,
   refunds_enabled: false,
   staff_limit: 10,
@@ -114,5 +115,28 @@ describe('Settings page', () => {
     const table = await screen.findByRole('table', { name: 'Version history' });
     expect(within(table).getByText('System')).toBeInTheDocument();
     expect(within(table).getByText('₹2,000')).toBeInTheDocument();
+  });
+});
+
+describe('Settings page: accepted ID documents (N12)', () => {
+  it('sends the accepted ID documents when one is added', async () => {
+    const fetchMock = mockApi({
+      'GET /api/v1/settings/current': { body: version },
+      'GET /api/v1/settings/versions': {
+        body: { items: [version], total: 1, page: 1, page_size: 10 },
+      },
+      'POST /api/v1/settings': { status: 201, body: version },
+    });
+    renderApp('/settings', { user: ownerUser });
+    const voter = await screen.findByRole('checkbox', { name: 'Voter ID' });
+    expect(screen.getByRole('checkbox', { name: 'Masked Aadhaar' })).toBeChecked();
+    await userEvent.click(voter);
+    await userEvent.click(screen.getByRole('button', { name: 'Save as a new version' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Save version' }));
+    await screen.findByText('Settings saved as a new version.');
+    expect(callsTo(fetchMock, 'POST', '/api/v1/settings')[0]?.body).toEqual({
+      accepted_id_types: ['masked_aadhaar', 'voter_id'],
+      reason: null,
+    });
   });
 });

@@ -28,6 +28,7 @@ from tests.api.helpers import (
     enrol_owner,
     make_owner,
     make_staff,
+    staff_token,
 )
 
 
@@ -130,3 +131,31 @@ def staff_factory(app_engine: Engine, clean_db: None) -> StaffFactory:
         return make_staff(app_engine, **kwargs)  # type: ignore[arg-type]
 
     return factory
+
+
+@dataclass
+class Team:
+    """The owner and two staff members, all signed in."""
+
+    owner: OwnerContext
+    staff_a_id: int
+    staff_a: str  # access token
+    staff_b_id: int
+    staff_b: str
+
+
+STAFF_A_MOBILE = "9000000201"
+STAFF_B_MOBILE = "9000000202"
+
+
+@pytest.fixture
+def team(api: TestClient, owner: OwnerContext, staff_factory: StaffFactory) -> Team:
+    staff_a_id = staff_factory(name="Test Staff 201", mobile=STAFF_A_MOBILE)
+    staff_b_id = staff_factory(name="Test Staff 202", mobile=STAFF_B_MOBILE)
+    return Team(
+        owner=owner,
+        staff_a_id=staff_a_id,
+        staff_a=staff_token(api, STAFF_A_MOBILE),
+        staff_b_id=staff_b_id,
+        staff_b=staff_token(api, STAFF_B_MOBILE),
+    )

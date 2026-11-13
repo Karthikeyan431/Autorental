@@ -76,7 +76,8 @@ jobs:
           hex() { python -c "import secrets; print(secrets.token_hex(24))"; }
           key() { python -c "import base64, secrets; print(base64.b64encode(secrets.token_bytes(32)).decode())"; }
           OWNER_PW=$(hex); USER_PW=$(hex); SECRET=$(hex)$(hex); FIELD_KEY=$(key); FILE_KEY=$(key)
-          for value in "$OWNER_PW" "$USER_PW" "$SECRET" "$FIELD_KEY" "$FILE_KEY"; do
+          LOOKUP_KEY=$(key)
+          for value in "$OWNER_PW" "$USER_PW" "$SECRET" "$FIELD_KEY" "$FILE_KEY" "$LOOKUP_KEY"; do
             echo "::add-mask::$value"
           done
 
@@ -102,6 +103,7 @@ jobs:
             echo "FIELD_ENCRYPTION_KEY=${FIELD_KEY}"
             echo "FILE_ENCRYPTION_KEYS=k1:${FILE_KEY}"
             echo "ACTIVE_FILE_KEY_ID=k1"
+            echo "LOOKUP_HMAC_KEY=${LOOKUP_KEY}"
           } >> "$GITHUB_ENV"
 
       # --- Backend -------------------------------------------------------------------------

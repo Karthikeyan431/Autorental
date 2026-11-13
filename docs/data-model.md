@@ -17,7 +17,7 @@ Conventions:
 | user_permissions | user_id, permission_code, granted_by, granted_at | Owner-only codes cannot be granted (service check plus a CHECK list) |
 | sessions | user_id, refresh_token_hash, family_id, expires_at, revoked_at, ip, user_agent | Refresh rotation; reuse of an old token revokes the family |
 | audit_logs | occurred_at, actor_id, action, entity_type, entity_id, before, after (redacted JSON), reason, ip, request_id, prev_hash, hash | Insert-only. The app DB role gets INSERT and SELECT only. Hash chain over the canonical JSON of each row |
-| settings_versions | effective_from, rent_due_time, due_day_offset (Q9, default 0), licence_alert_days (30), vehicle_alert_days (30), permitted_licence_classes, advance_adjustments_enabled, refunds_enabled (false), staff_limit (10), business_name, business_address, business_upi_id, upi_payee_name, whatsapp_template, pay_request_time (08:00), weekly_pay_day (ISO weekday 1–7, default 1 = Monday), escalation_suggest_after_days (1), weekly_mdr_warning_paise (200000), created_by | Never updated; each change inserts a version. "Current" = latest effective_from ≤ now |
+| settings_versions | effective_from, rent_due_time, due_day_offset (Q9, default 0), licence_alert_days (30), vehicle_alert_days (30), permitted_licence_classes, accepted_id_types (N12, default `{masked_aadhaar}`), advance_adjustments_enabled, refunds_enabled (false), staff_limit (10), business_name, business_address, business_upi_id, upi_payee_name, whatsapp_template, pay_request_time (08:00), weekly_pay_day (ISO weekday 1–7, default 1 = Monday), escalation_suggest_after_days (1), weekly_mdr_warning_paise (200000), created_by | Never updated; each change inserts a version. "Current" = latest effective_from ≤ now |
 | notifications | user_id, kind, entity_type, entity_id, message, created_at, read_at | In-app alerts |
 | push_subscriptions | user_id, endpoint (unique), p256dh, auth, created_at, revoked_at | Web Push |
 
@@ -25,16 +25,16 @@ Conventions:
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| drivers | code (unique, e.g. D0042), full_name, mobile (unique, normalised +91), alt_mobile, address, date_of_birth, emergency_name, emergency_mobile, photo_document_id, account_status (`active` / `suspended` / `inactive`), payment_rhythm (`daily` / `weekly`), created_by (immutable), managed_by, registered_at | `created_by` is set once; a trigger or service guard refuses changes |
+| drivers | code (unique, e.g. D0042, from `driver_code_seq` via `next_driver_code()`), full_name, mobile (unique, normalised +91), alt_mobile, address, date_of_birth, emergency_name, emergency_mobile, photo_document_id, account_status (`active` / `suspended` / `inactive`), status_reason, payment_rhythm (`daily` / `weekly`), created_by (immutable), managed_by, registered_at | `created_by` and `code` are set once; the trigger `drivers_immutable` refuses any change, for every role |
 | driver_manager_history | driver_id, staff_id, from_at, to_at, changed_by, reason | One open row per driver (to_at IS NULL, partial unique) |
-| driver_restrictions | driver_id, reason, is_blocking, placed_by, placed_at, lifted_by, lifted_at | Eligibility condition 5 |
-| consents | driver_id, purpose (`kyc`, `aadhaar_qr`), notice_version, method (`in_person_signed`, `in_person_checkbox`), captured_by, captured_at, withdrawn_at | Required before any KYC step |
-| kyc_checks | driver_id, check_type (`identity` / `licence`), attempt_no, method (`uidai_qr` / `uidai_app_attested` / `parivahan_lookup` / `manual` / `demo`), status (`draft` / `submitted` / `under_review` / `approved` / `rejected` / `resubmission_required` / `expired`), is_simulated, evidence (minimal JSON), review_checklist (JSON), submitted_at, reviewed_by, reviewed_at, decision_reason, is_current | One row per attempt; partial unique on (driver_id, check_type) where is_current |
-| kyc_events | kyc_check_id, from_status, to_status, actor_id, at, reason | History |
-| identity_details | kyc_check_id, document_type, id_last4, name_on_document, dob_or_yob, gender, qr_signature_valid (bool, nullable), photo_match_confirmed_by | **Never** a full Aadhaar number. No QR payload or address stored unless the legal adviser approves (N13) |
-| licence_details | kyc_check_id, licence_number *(enc)*, licence_number_hash (unique, for duplicate checks), name_on_licence, date_of_birth, issue_date, valid_until_non_transport, valid_until_transport, vehicle_classes (text[]), issuing_authority, lookup_status_text, looked_up_at, lookup_screenshot_document_id | Validity drives eligibility and alerts |
+| driver_restrictions | driver_id, reason, is_blocking, placed_by, placed_at, lifted_by, lifted_at, lift_reason | Eligibility condition 5 |
+| consents | driver_id, purpose (`kyc`, `aadhaar_qr`), notice_version, method (`in_person_signed`, `in_person_checkbox`), captured_by, captured_at, withdrawn_at, withdrawn_by, withdrawal_reason | Required before any KYC step |
+| kyc_checks | driver_id, check_type (`identity` / `licence`), attempt_no, method (`uidai_qr` / `uidai_app_attested` / `parivahan_lookup` / `manual` / `demo`), status (`draft` / `submitted` / `under_review` / `approved` / `rejected` / `resubmission_required` / `expired`), is_simulated, evidence (minimal JSON), review_checklist (JSON), submitted_at, reviewed_by, reviewed_at, decision_reason, is_current, reopened_from_id, created_by | One row per attempt; unique (driver_id, check_type, attempt_no); partial unique on (driver_id, check_type) where is_current. A reopen copies the details to the new attempt (D4, D37) |
+| kyc_events | kyc_check_id, from_status, to_status, actor_id (NULL = a job), at, reason | Insert-only history |
+| identity_details | kyc_check_id, document_type (`masked_aadhaar` / `voter_id` / `passport`, N12), id_last4 (CHECK: exactly 4 digits), name_on_document, dob_or_yob, gender, qr_signature_valid (bool, nullable), photo_match_confirmed_by | **Never** a full Aadhaar number. No QR payload or address stored unless the legal adviser approves (N13) |
+| licence_details | kyc_check_id, driver_id, licence_number *(enc)*, licence_number_hash (keyed HMAC with `LOOKUP_HMAC_KEY`; one licence per driver: exclusion constraint on `(licence_number_hash =, driver_id <>)`, D37), licence_number_last4, name_on_licence, date_of_birth, issue_date, valid_until_non_transport, valid_until_transport, vehicle_classes (text[]), issuing_authority, lookup_status_text, looked_up_at, lookup_screenshot_document_id | Validity drives eligibility and alerts |
 | documents | owner_type, owner_id, doc_type, storage_key, sha256, mime_type, size_bytes, key_id, uploaded_by, uploaded_at, retention_until, purged_at | Encrypted files on disk outside the web root; served only through an authenticated, audited endpoint |
-| document_access_log | document_id, user_id, at, ip, purpose | Every view or download |
+| document_access_log | document_id, user_id, at, ip, purpose (`view` / `download`) | Insert-only. Every view or download |
 
 ## Autos
 
@@ -72,7 +72,7 @@ Conventions:
 | --- | --- | --- |
 | escalations | driver_id, raised_by (owner), assigned_to (manager at raise time; follows reassignment), overdue_paise_at_raise, overdue_days_at_raise, note, follow_up_on, status (`open` / `in_progress` / `resolved` / `closed`), resolved_at, closed_by, closed_reason | One open or in-progress escalation per driver (partial unique) |
 | escalation_events | escalation_id, actor_id, kind (`call` / `visit` / `promise` / `note` / `paid` / `reassigned` / `system`), promised_on, note, at | |
-| alerts | kind, entity_type, entity_id, severity, message, created_at, resolved_at, resolved_by | Licence expiry, vehicle papers, overdue rent, approvals waiting, follow-ups due |
+| alerts | kind, entity_type, entity_id, severity, message, dedupe_key (unique, so jobs never raise the same alert twice), created_at, resolved_at, resolved_by | Licence expiry (Week 3), vehicle papers, overdue rent, approvals waiting, follow-ups due. Messages hold codes and dates, never names or numbers |
 
 ## Removed from earlier plans
 

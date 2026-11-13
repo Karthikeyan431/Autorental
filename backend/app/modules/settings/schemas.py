@@ -1,7 +1,7 @@
 """Validation for settings versions. Defaults follow docs/data-model.md."""
 
 from datetime import datetime, time
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -11,6 +11,13 @@ NonNegativeInt = Annotated[int, Field(strict=True, ge=0)]
 Paise = Annotated[int, Field(strict=True, ge=0)]  # integer paise; floats are refused
 IsoWeekday = Annotated[int, Field(strict=True, ge=1, le=7)]  # 1 = Monday
 ShortText = Annotated[str, Field(min_length=1, max_length=200)]
+# N12: identity documents staff may accept (app.modules.kyc.models.ID_DOCUMENT_TYPES).
+IdDocumentType = Literal["masked_aadhaar", "voter_id", "passport"]
+AcceptedIdTypes = Annotated[list[IdDocumentType], Field(min_length=1)]
+
+
+def _default_id_types() -> list[IdDocumentType]:
+    return ["masked_aadhaar"]
 
 
 class SettingsValues(BaseModel):
@@ -23,6 +30,7 @@ class SettingsValues(BaseModel):
     licence_alert_days: NonNegativeInt = 30
     vehicle_alert_days: NonNegativeInt = 30
     permitted_licence_classes: list[ShortText] = Field(default_factory=list)  # N12
+    accepted_id_types: AcceptedIdTypes = Field(default_factory=_default_id_types)  # N12
     advance_adjustments_enabled: bool = True  # rule 5: the owner can switch it off
     refunds_enabled: bool = False  # Q5
     staff_limit: Annotated[int, Field(strict=True, ge=1)] = 10  # rule 16, N10
@@ -49,6 +57,7 @@ class SettingsChanges(BaseModel):
     licence_alert_days: NonNegativeInt | None = None
     vehicle_alert_days: NonNegativeInt | None = None
     permitted_licence_classes: list[ShortText] | None = None
+    accepted_id_types: AcceptedIdTypes | None = None
     advance_adjustments_enabled: bool | None = None
     refunds_enabled: bool | None = None
     staff_limit: Annotated[int, Field(strict=True, ge=1)] | None = None

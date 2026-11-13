@@ -2,7 +2,7 @@
 
 Every dependency must be **free and open source** (hard constraint 1). Versions are pinned exactly; the lock files (`backend/requirements.lock`, `backend/requirements-dev.lock`, `frontend/package-lock.json`) are the final word. Update this file whenever a package is added or upgraded, and ask before adding anything not listed in `CLAUDE.md`.
 
-**Registry check:** every Week 1 version below was confirmed against PyPI (`pip index versions`) and npm (`npm view`) on **2026-11-12**, immediately before installing. The Week 2 packages (argon2-cffi, pyjwt, pyotp, cryptography, qrcode, react-hook-form, zod, @hookform/resolvers) were re-checked on **2026-11-13** and are installed. Packages for later weeks show the latest version on that date and are re-checked when they are added.
+**Registry check:** every Week 1 version below was confirmed against PyPI (`pip index versions`) and npm (`npm view`) on **2026-11-12**, immediately before installing. The Week 2 packages (argon2-cffi, pyjwt, pyotp, cryptography, qrcode, react-hook-form, zod, @hookform/resolvers) were re-checked on **2026-11-13** and are installed. The Week 3 packages (python-multipart, pillow) were re-checked on **2026-11-13** and are installed; neither adds a dependency of its own. Packages for later weeks show the latest version on that date and are re-checked when they are added.
 
 ## Backend (Python 3.12)
 
@@ -49,6 +49,7 @@ Transitive runtime packages (Starlette, anyio, Mako, python-dotenv and others) a
 | typescript | 6.0.3 | Apache-2.0 | 1 | Types. 7.0.2 is newer, but `typescript-eslint` 8.72 supports only `<6.1` |
 | vite | 8.3.8 | MIT | 1 | Dev server and build |
 | @vitejs/plugin-react | 6.3.0 | MIT | 1 | React support for Vite |
+| @vitejs/plugin-basic-ssl | 2.3.0 | MIT | 3 | Self-signed HTTPS for `dev.ps1 -Lan` only (dev) |
 | tailwindcss, @tailwindcss/vite | 4.3.5 | MIT | 1 | Styles |
 | vitest | 5.1.0 | MIT | 1 | Tests (dev) |
 | jsdom | 31.0.0 | MIT | 1 | Browser environment for tests (dev) |

@@ -27,9 +27,9 @@ Status codes:
 | Auth | `POST /auth/login` (mobile or email + password) · `POST /auth/totp` (owner second step) · `POST /auth/refresh` · `POST /auth/logout` · `POST /auth/change-password` · `POST /auth/totp/setup` and `/auth/totp/confirm` (owner) | Everyone |
 | Users | `GET, POST /users` · `GET, PATCH /users/{id}` · `POST /users/{id}/deactivate` · `/reactivate` · `/reset-password` · `PUT /users/{id}/permissions` · `GET /permissions` (code catalogue) | Owner |
 | Settings | `GET /settings/current` · `GET /settings/versions` · `POST /settings` (new version) | Owner (read: everyone) |
-| Drivers | `GET, POST /drivers` · `GET, PATCH /drivers/{id}` · `POST /drivers/{id}/photo` · `POST /drivers/{id}/manager` (owner) · `GET /drivers/{id}/timeline` · `POST /drivers/{id}/restrictions` · `POST /restrictions/{id}/lift` · `POST /drivers/{id}/suspend`, `/reactivate` | Staff (edit: own drivers, N1); owner |
+| Drivers | `GET, POST /drivers` · `GET /drivers/managers` · `GET, PATCH /drivers/{id}` · `POST /drivers/{id}/photo` · `POST /drivers/{id}/manager` (owner) · `GET /drivers/{id}/manager-history` · `GET /drivers/{id}/timeline` · `GET, POST /drivers/{id}/restrictions` · `POST /restrictions/{id}/lift` · `POST /drivers/{id}/suspend`, `/reactivate` | Staff (edit: own drivers, N1); owner |
 | Consents | `POST /drivers/{id}/consents` · `POST /consents/{id}/withdraw` | Staff, owner |
-| KYC | `GET /kyc/queue` · `POST /drivers/{id}/kyc/{identity\|licence}/attempts` · `POST /kyc/attempts/{id}/documents` · `POST /kyc/attempts/{id}/uidai-qr` (flagged) · `POST /kyc/attempts/{id}/uidai-app-attestation` · `POST /kyc/attempts/{id}/parivahan-lookup` · `POST /kyc/attempts/{id}/submit` · `POST /kyc/attempts/{id}/decision` · `POST /kyc/attempts/{id}/reopen` (owner) · `GET /drivers/{id}/eligibility` | Staff, owner |
+| KYC | `GET /kyc/queue?bucket=` · `GET /kyc/queue/counts` · `GET /drivers/{id}/kyc` · `POST /drivers/{id}/kyc/{identity\|licence}/attempts` · `GET /kyc/attempts/{id}` · `PUT /kyc/attempts/{id}/identity-details` · `PUT /kyc/attempts/{id}/licence-details` · `POST /kyc/attempts/{id}/documents` · `POST /kyc/attempts/{id}/uidai-qr` (flagged) · `POST /kyc/attempts/{id}/uidai-app-attestation` · `POST /kyc/attempts/{id}/parivahan-lookup` · `POST /kyc/attempts/{id}/submit` · `POST /kyc/attempts/{id}/decision` · `POST /kyc/attempts/{id}/reopen` (owner) · `GET /drivers/{id}/eligibility` | Staff, owner |
 | Documents | `GET /documents/{id}/content` (streamed, audited) · `GET /documents/{id}` (metadata) | By permission |
 | Vehicles | `GET, POST /vehicles` · `GET, PATCH /vehicles/{id}` · `POST /vehicles/{id}/status` · `GET, POST /vehicles/{id}/compliance` · `GET, POST /vehicles/{id}/maintenance` | Staff, owner |
 | Agreements | `GET, POST /agreements` · `GET /agreements/{id}` · `POST /agreements/{id}/activate` · `/end` · `/cancel` · `GET /agreements/{id}/print` (PDF) · `POST /agreements/{id}/signed-copy` | Staff, owner |
@@ -79,6 +79,36 @@ Status codes:
 | `RENT_DUE_TIME_REQUIRED` | 422 | The first settings version without a rent due time |
 
 `GET /settings/current` returns `null` until the first version is saved. `POST /settings` takes the changed fields plus an optional `reason`, and returns the new version (201).
+
+## Drivers and KYC (Week 3)
+
+- `GET /drivers` filters: `search`, `status`, `managed_by`, `mine=true`, `kyc=verified|not_verified` (the KYC filter only returns drivers whose KYC you may see). KYC statuses in driver responses are `null` for users who cannot see that driver's KYC (D33).
+- `GET /kyc/queue?bucket=pending|under_review|resubmission|rejected|expiring` and `GET /kyc/queue/counts` (the dashboard counts use the same query, rule 9).
+- `POST /kyc/attempts/{id}/documents` is multipart: `doc_type` (`id_front`, `id_back`, `licence_front`, `licence_back`) and `file`. `POST /drivers/{id}/photo` is multipart: `file`.
+- `POST /kyc/attempts/{id}/decision` `{decision: approve|reject|resubmit, checklist: {key: bool}, reason}`. `POST /kyc/attempts/{id}/reopen` `{reason}` returns the new attempt (201).
+- `GET /documents/{id}/content?purpose=view|download`: streamed, `Cache-Control: no-store`; PDFs always `Content-Disposition: attachment`.
+- The licence number is never returned; responses carry `licence_number_masked` (last 4 characters).
+
+| Code | Status | When |
+| --- | --- | --- |
+| `NOT_FOUND` | 404 | A driver, attempt or document that does not exist, or KYC you may not see (D33) |
+| `DRIVER_NOT_EDITABLE` | 403 | Editing (or capturing KYC for) a driver you can see but do not manage (D37) |
+| `MOBILE_TAKEN` | 409 | Another driver has this mobile (after normalising to +91) |
+| `LICENCE_TAKEN` | 409 | Another driver has this licence number (after normalising) |
+| `INVALID_LICENCE_NUMBER` | 422 | Not 6 to 20 letters and digits after removing spaces and dashes |
+| `MANAGER_NOT_AVAILABLE` / `SAME_MANAGER` | 409 | Change manager to an inactive or unknown user / the current manager |
+| `CONSENT_REQUIRED` | 409 | A KYC attempt before a `kyc` consent (or after it was withdrawn) |
+| `KYC_METHOD_NOT_AVAILABLE` | 409 | A method other than `manual` (Week 4 adds the others) |
+| `KYC_ATTEMPT_OPEN` / `KYC_REOPEN_REQUIRED` | 409 | A new attempt while one is open / after approval or rejection (owner reopen only, D34) |
+| `ATTEMPT_NOT_EDITABLE` | 409 | Details or uploads on an attempt that is no longer a draft |
+| `KYC_INCOMPLETE` | 409 | Submit without details or a required document (`details.missing`) |
+| `KYC_INVALID_TRANSITION` | 409 | Deciding a draft, or reopening something not approved or rejected |
+| `CHECKLIST_INCOMPLETE` | 409 | Approve without every required checklist item (`details.missing`) |
+| `CHECKLIST_UNKNOWN_ITEM` / `REASON_REQUIRED` | 422 | A checklist key that does not belong / reject or resubmit without a reason |
+| `ID_TYPE_NOT_ACCEPTED` | 409 | An ID document not in the setting `accepted_id_types` (N12) |
+| `DOC_TYPE_NOT_ALLOWED` | 422 | A document type that does not belong to this check |
+| `FILE_TYPE_NOT_ALLOWED` / `FILE_TOO_LARGE` / `IMAGE_TOO_LARGE` | 422 | Not a real JPEG, PNG or PDF / over 5 MB (images) or 10 MB (PDFs) / over 40 megapixels |
+| `DRIVER_STATUS_UNCHANGED` / `RESTRICTION_ALREADY_LIFTED` / `CONSENT_ALREADY_WITHDRAWN` | 409 | Repeating a status change |
 
 ## Report keys
 

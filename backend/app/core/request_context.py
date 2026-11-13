@@ -72,6 +72,8 @@ class RequestIdMiddleware:
                     "path": scope.get("path"),
                     "status": status,
                     "duration_ms": round((time.perf_counter() - started) * 1000, 1),
+                    # On the record itself, so the line is right wherever it is formatted.
+                    "request_id": request_id,
                 },
             )
 

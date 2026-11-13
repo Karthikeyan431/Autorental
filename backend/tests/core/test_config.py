@@ -86,6 +86,29 @@ def test_env_example_contains_no_real_values() -> None:
     text = (BACKEND_DIR / ".env.example").read_text(encoding="utf-8")
     for line in text.splitlines():
         if line.startswith(
-            ("SECRET_KEY=", "FIELD_ENCRYPTION_KEY=", "FILE_ENCRYPTION_KEYS=", "SEED_DEV_PASSWORD=")
+            (
+                "SECRET_KEY=",
+                "FIELD_ENCRYPTION_KEY=",
+                "FILE_ENCRYPTION_KEYS=",
+                "LOOKUP_HMAC_KEY=",
+                "SEED_DEV_PASSWORD=",
+            )
         ):
             assert line.split("=", 1)[1].strip() in {"", "change-me"}
+
+
+# --- Week 3: licence lookup key and the LAN development cookies -----------------------------------
+
+
+@pytest.mark.parametrize("value", ["", "change-me", "bm90LTMyLWJ5dGVz"])
+def test_production_refuses_a_missing_or_weak_lookup_key(value: str) -> None:
+    settings = make_settings(APP_ENV="production", LOOKUP_HMAC_KEY=value)
+    with pytest.raises(UnsafeConfigError, match="LOOKUP_HMAC_KEY"):
+        check_production_safety(settings)
+
+
+def test_the_removed_insecure_cookie_setting_has_no_effect() -> None:
+    """DEV_INSECURE_COOKIES was removed (dev.ps1 -Lan now serves https); a leftover value in an
+    old .env is ignored rather than honoured."""
+    settings = make_settings(DEV_INSECURE_COOKIES=True)
+    assert not hasattr(settings, "DEV_INSECURE_COOKIES")

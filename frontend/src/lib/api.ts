@@ -47,8 +47,23 @@ function isEnvelope(value: unknown): value is Envelope {
   );
 }
 
-export function newRequestId(): string {
-  return crypto.randomUUID().replaceAll('-', '');
+/**
+ * 32 hex characters for X-Request-ID. crypto.randomUUID exists only in a secure context
+ * (https or localhost); over plain http (for example a phone on the LAN) it is missing, so fall
+ * back to getRandomValues, which every context has. The id only correlates logs; it is not a
+ * secret.
+ */
+export function newRequestId(cryptoImpl: Partial<Crypto> | undefined = globalThis.crypto): string {
+  if (typeof cryptoImpl?.randomUUID === 'function') {
+    return cryptoImpl.randomUUID().replaceAll('-', '');
+  }
+  const bytes = new Uint8Array(16);
+  if (typeof cryptoImpl?.getRandomValues === 'function') {
+    cryptoImpl.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export type ApiRequestInit = Omit<RequestInit, 'body'> & {
@@ -56,8 +71,12 @@ export type ApiRequestInit = Omit<RequestInit, 'body'> & {
   body?: BodyInit;
   /** Send the access token and refresh it on 401 (default true). */
   auth?: boolean;
+  /** 'blob' returns the body as a Blob (documents, shown from memory, never a public URL). */
+  responseType?: 'json' | 'blob';
 };
 
+// Sign-in, 2-step, setup and refresh calls never trigger the silent refresh: a 401 there is
+// the answer itself (wrong password, expired challenge), not an expired access token.
 const AUTH_PATH = '/api/v1/auth/';
 
 export async function apiFetch<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
@@ -82,11 +101,11 @@ export async function apiFetch<T>(path: string, init: ApiRequestInit = {}): Prom
 }
 
 async function request<T>(path: string, init: ApiRequestInit): Promise<T> {
-  const { json, headers: initHeaders, auth = true, ...rest } = init;
+  const { json, headers: initHeaders, auth = true, responseType = 'json', ...rest } = init;
   const headers = new Headers(initHeaders);
   const requestId = newRequestId();
   headers.set('X-Request-ID', requestId);
-  headers.set('Accept', 'application/json');
+  if (responseType === 'json') headers.set('Accept', 'application/json');
   const token = getAccessToken();
   if (auth && token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`);
@@ -107,6 +126,7 @@ async function request<T>(path: string, init: ApiRequestInit): Promise<T> {
 
   const responseRequestId = response.headers.get('X-Request-ID') ?? requestId;
   if (response.status === 204) return undefined as T;
+  if (responseType === 'blob' && response.ok) return (await response.blob()) as T;
 
   const text = await response.text();
   let data: unknown = undefined;

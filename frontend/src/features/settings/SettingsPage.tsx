@@ -13,7 +13,7 @@ import { Loading } from '../../components/ui/Loading';
 import { Select } from '../../components/ui/Select';
 import { Table, type Column } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/useToast';
-import { ApiError } from '../../lib/api';
+import { errorMessage } from '../../lib/errors';
 import { formatDateTime, formatRupees } from '../../lib/format';
 import { paiseToRupeesInput, parseRupeesToPaise } from '../../lib/money';
 import { strings } from '../../lib/strings';
@@ -53,6 +53,9 @@ const schema = z.object({
   advance_adjustments_enabled: z.boolean(),
   refunds_enabled: z.boolean(),
   permitted_licence_classes: z.string().max(500),
+  accepted_id_types: z
+    .array(z.enum(['masked_aadhaar', 'voter_id', 'passport']))
+    .min(1, t.acceptedIdTypesRequired),
 });
 type Form = z.infer<typeof schema>;
 
@@ -74,6 +77,7 @@ const EMPTY: Form = {
   advance_adjustments_enabled: true,
   refunds_enabled: false,
   permitted_licence_classes: '',
+  accepted_id_types: ['masked_aadhaar'],
 };
 
 function toForm(v: SettingsValues): Form {
@@ -95,6 +99,7 @@ function toForm(v: SettingsValues): Form {
     advance_adjustments_enabled: v.advance_adjustments_enabled,
     refunds_enabled: v.refunds_enabled,
     permitted_licence_classes: v.permitted_licence_classes.join(', '),
+    accepted_id_types: v.accepted_id_types ?? ['masked_aadhaar'],
   };
 }
 
@@ -120,6 +125,7 @@ function toValues(f: Form): Partial<SettingsValues> {
       .split(',')
       .map((c) => c.trim())
       .filter(Boolean),
+    accepted_id_types: f.accepted_id_types,
   };
   if (f.whatsapp_template.trim()) values.whatsapp_template = f.whatsapp_template.trim();
   return values;
@@ -193,7 +199,7 @@ function SettingsForm({ current }: { current: SettingsVersion | null }) {
       setPending(null);
       setReason('');
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : strings.common.somethingWentWrong);
+      setError(errorMessage(e));
       setPending(null);
     } finally {
       setSaving(false);
@@ -295,6 +301,20 @@ function SettingsForm({ current }: { current: SettingsVersion | null }) {
           error={errors.permitted_licence_classes?.message}
           {...form.register('permitted_licence_classes')}
         />
+        <fieldset className="flex flex-col gap-2">
+          <legend className="text-sm font-medium text-slate-800">{t.acceptedIdTypes}</legend>
+          {(['masked_aadhaar', 'voter_id', 'passport'] as const).map((value) => (
+            <Checkbox
+              key={value}
+              label={strings.kyc.idTypes[value] ?? value}
+              value={value}
+              {...form.register('accepted_id_types')}
+            />
+          ))}
+          {errors.accepted_id_types?.message && (
+            <p className="text-xs font-medium text-red-700">{errors.accepted_id_types.message}</p>
+          )}
+        </fieldset>
       </Section>
       <Section title={t.sections.staffAndAdvance}>
         <Input

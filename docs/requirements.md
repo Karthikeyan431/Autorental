@@ -44,7 +44,7 @@ Owner-only actions cannot be granted to staff. "Grantable" means the owner can s
 | Create, edit, deactivate staff; set permissions | Yes | No | Never |
 | Business settings: rent due time, business UPI ID and payee name, staff limit, WhatsApp template | Yes | No | Never |
 | Register a driver, take the photo, record consent, upload documents | Yes | Yes | n/a |
-| Verify identity and licence; approve, reject or ask again (N2) | Yes | Yes | n/a |
+| Verify identity and licence; approve, reject or ask again (N2). From Week 4: only for drivers they currently manage (N16) | Yes | Yes | n/a |
 | Reopen or overturn a verification | Yes | No | Never |
 | Change which staff member manages a driver | Yes | No | Never |
 | Place or lift a blocking restriction; suspend or reactivate a driver (`drivers.restrict`) | Yes | No | Yes |
@@ -60,8 +60,19 @@ Owner-only actions cannot be granted to staff. "Grantable" means the owner can s
 | Raise or close an escalation | Yes | No | Never |
 | Work an escalation (log calls, visits, promises) | Yes | Their drivers | n/a |
 | See drivers | All | All; edit only drivers they manage (N1) | n/a |
+| See full identity values (licence number, address, dates of birth, gender; masked by default) via "Show", one audited reveal at a time (D45, from Week 4) | Yes | Only drivers they currently manage | Never (not even with `drivers.edit_any`) |
+| View KYC document images (they show those values in full) (D45, N16, from Week 4) | Yes | Only drivers they currently manage | Never |
+| Edit masked identity fields (address, date of birth; "Leave blank to keep the current value") (N17, from Week 4) | Yes | Only drivers they currently manage | Never (`drivers.edit_any` covers the other fields only) |
 | Business-wide money figures, reports, Excel export | Yes | Own drivers only (N1) | Yes |
 | Audit log | Yes | No | Never |
+
+**Masked identity fields (client request, 13 Nov 2026; D45, from Week 4):** identity values
+are masked on every screen and in every list, detail and KYC response, export, log and error
+message. Full values come only from the reveal endpoint, for the owner and the driver's current
+manager, one field at a time, rate-limited per user (setting `reveal_limit_per_hour`, 30), and
+each reveal is audited and shown in the driver's Activity tab. The address and both dates of
+birth are also encrypted at rest (N15). If a manager is away, the owner changes the manager. Aadhaar is unchanged: the last 4 digits only, and no field may hold a
+full Aadhaar number.
 
 **Staff limit:** the setting `staff_limit` starts at 10 active staff. Creating or reactivating staff beyond the limit is refused (N10).
 

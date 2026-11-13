@@ -37,6 +37,14 @@ Everything here is free. The one risk is that Oracle's free tier has no guarante
 
 ## Backups (nightly, free)
 
+**Keys are not in the database backup, and they must be backed up too.** Keep a copy of
+`SECRET_KEY`, `FIELD_ENCRYPTION_KEY` (+ `FIELD_ENCRYPTION_KEY_ID`), `FILE_ENCRYPTION_KEYS`
+(+ `ACTIVE_FILE_KEY_ID`) and `LOOKUP_HMAC_KEY` in the owner's password manager or a sealed
+offline copy, separate from the data backups. Without the field and file keys, licence numbers
+and documents cannot be decrypted. `LOOKUP_HMAC_KEY` is never rotated: losing or changing it
+breaks the duplicate check for every stored licence number (D36).
+
+
 - `pg_dump -Fc` and a tar of `data/files/`, encrypted with `age` to the owner's public key, uploaded to Object Storage with `rclone` (free). Keep 14 nightly backups.
 - **Weekly:** the owner downloads the latest backup from Settings and keeps it offline.
 

@@ -16,13 +16,15 @@ Target: OWASP ASVS level 1 at launch. The app holds identity documents and money
 ## Authorisation
 
 - Permission codes are listed in `api.md`. Every route declares its permission, and a test lists every route and fails if one has no declared permission.
-- Staff can edit only the drivers they manage (N1 default); reads follow N1.
-- Return 404, not 403, for a record the user is not allowed to see.
+- Staff can edit only the drivers they manage (N1 default); reads follow N1. Editing a driver you can see but may not edit gives 403 `DRIVER_NOT_EDITABLE` (D37).
+- Return 404, not 403, for a record the user is not allowed to see. KYC documents, details, consents and decisions are visible only to the owner, the managing staff member and staff with `drivers.edit_any` (D33). From Week 4, document images and KYC decisions are for the owner and the current manager only (D46), and identity fields are masked, encrypted at rest (address, dates of birth, licence number) and revealed one field at a time with an audit entry (D45, D46).
 
 ## Data protection
 
 - Never store a full Aadhaar number (see `kyc.md`).
 - Encrypt licence numbers and the owner's TOTP secret at application level (AES-256-GCM, `cryptography`). Keys come from the environment, with key rotation through `key_id`.
+- Licence-number duplicate checks use HMAC-SHA256 with `LOOKUP_HMAC_KEY`, never a plain hash. This key is never rotated; back it up with the other keys (D36).
+- No field accepts a 12-digit (Aadhaar-like) number: identity fields, names, addresses and reasons all refuse it.
 - Documents are encrypted on disk, served only through the audited endpoint, and never given public URLs.
 - Logs never contain names, mobiles, Aadhaar or licence numbers, addresses, tokens or passwords. Log user ids and request ids.
 - Consent is recorded before KYC. Build to the DPDP Rules 2025 now: their main obligations apply from 13 May 2027.
@@ -39,7 +41,10 @@ Target: OWASP ASVS level 1 at launch. The app holds identity documents and money
 - **CORS:** only the app's own origin.
 - **CSRF:** cookie-based refresh plus `SameSite=Strict`, and a double-submit token on `/auth/refresh`.
 - **Rate limits:** login, refresh, uploads and statement import.
-- **Uploads:** check the real file type and size; strip EXIF; never serve uploads inline as HTML.
+- **Uploads:** check the real file type and size; strip EXIF; refuse decompression bombs; never serve uploads inline as HTML, and serve PDFs only as attachments (D40).
+- **Cookies are always Secure**, in every environment. Phone testing (`dev.ps1 -Lan`) uses HTTPS with a self-signed development certificate instead of dropping the flag (D43; `DEV_INSECURE_COOKIES` was removed).
+- **Client IP:** taken from `X-Forwarded-For` only when the connection comes from the trusted local proxy (`--forwarded-allow-ips 127.0.0.1`: the Vite proxy in development, Caddy in production); otherwise the connection's own address (D44).
+- **Logs:** one access line per request (method, path without the query string, status, duration, request id), never bodies. Validation errors never carry pydantic's `input` or `ctx`, in responses or logs (D44).
 - **Dependencies:** `pip-audit` and `npm audit` (both free) run in `check.ps1`.
 
 ## Backups and recovery (free)

@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     FIELD_ENCRYPTION_KEY_ID: str = "f1"  # stored with each encrypted value, for rotation
     FILE_ENCRYPTION_KEYS: SecretStr = SecretStr("")  # "key_id:base64,key_id:base64"
     ACTIVE_FILE_KEY_ID: str = ""
+    # HMAC key for licence-number duplicate checks (base64 of 32 bytes). Never rotate it: the
+    # stored hashes depend on it, so losing or changing it breaks duplicate detection.
+    LOOKUP_HMAC_KEY: SecretStr = SecretStr("")
 
     DOCUMENTS_DIR: Path = REPO_DIR / "data" / "files"
     UIDAI_CERT_PATH: Path | None = None
@@ -111,6 +114,10 @@ def check_production_safety(settings: Settings) -> None:
         problems.append("FILE_ENCRYPTION_KEYS must be key_id:base64-of-32-bytes entries")
     if settings.ACTIVE_FILE_KEY_ID not in file_keys:
         problems.append("ACTIVE_FILE_KEY_ID must name one of FILE_ENCRYPTION_KEYS")
+
+    lookup_key = settings.LOOKUP_HMAC_KEY.get_secret_value()
+    if _is_placeholder(lookup_key) or not _is_key(lookup_key):
+        problems.append("LOOKUP_HMAC_KEY must be base64 of 32 random bytes")
 
     if problems:
         raise UnsafeConfigError("Unsafe production configuration: " + "; ".join(problems))

@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Loading } from '../../components/ui/Loading';
 import { ApiError } from '../../lib/api';
+import { errorMessage } from '../../lib/errors';
 import { strings } from '../../lib/strings';
 import {
   confirmTotp,
@@ -28,10 +29,6 @@ type Step =
   | { kind: 'totp'; challenge: string }
   | { kind: 'setup'; challenge: string }
   | { kind: 'recovery'; result: Enrolled };
-
-function messageOf(error: unknown): string {
-  return error instanceof ApiError ? error.message : strings.common.somethingWentWrong;
-}
 
 function Card({ title, intro, children }: { title: string; intro?: string; children: ReactNode }) {
   return (
@@ -76,7 +73,7 @@ function PasswordStep({
         onChallenge({ kind: 'totp', challenge: result.challenge_token });
       else onChallenge({ kind: 'setup', challenge: result.challenge_token });
     } catch (e) {
-      setError(messageOf(e));
+      setError(errorMessage(e));
       form.resetField('password');
     }
   });
@@ -167,7 +164,7 @@ function TotpStep({
         onRestart(e.message);
         return;
       }
-      setError(messageOf(e));
+      setError(errorMessage(e));
       codeForm.resetField('code');
     }
   }
@@ -239,7 +236,7 @@ function SetupStep({
         if (!cancelled) setSetup(value);
       })
       .catch((e: unknown) => {
-        if (!cancelled) onRestart(messageOf(e));
+        if (!cancelled) onRestart(errorMessage(e));
       });
     return () => {
       cancelled = true;
@@ -258,7 +255,7 @@ function SetupStep({
         onRestart(e.message);
         return;
       }
-      setError(messageOf(e));
+      setError(errorMessage(e));
       form.resetField('code');
     }
   });

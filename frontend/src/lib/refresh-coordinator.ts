@@ -12,8 +12,8 @@
  *   instead of calling /auth/refresh with a cookie that has already been rotated.
  *
  * Sign-out is broadcast too, so every tab leaves together. Both APIs are same-origin only.
- * Without Web Locks (very old browsers) the refresh still works, but tabs are then not
- * guaranteed to take turns.
+ * Without Web Locks (very old browsers, or a page opened over plain http, where browsers remove
+ * navigator.locks) the refresh still works, but tabs are then not guaranteed to take turns.
  */
 
 export const REFRESH_LOCK = 'arms-auth-refresh';
@@ -42,7 +42,7 @@ export function createRefreshCoordinator<T>({
   callRefresh,
   onRemoteRefresh,
   onRemoteSignOut,
-  locks = typeof navigator !== 'undefined' ? navigator.locks : undefined,
+  locks = typeof navigator !== 'undefined' && navigator.locks ? navigator.locks : undefined,
   channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(AUTH_CHANNEL) : null,
 }: {
   callRefresh: () => Promise<T>;
