@@ -50,3 +50,11 @@ Decisions made with the agency lead. Client-facing rule changes still need the c
 | D27 | **Lockout response:** 429 `ACCOUNT_LOCKED` with "Too many attempts. Try again in 15 minutes." The IP throttle is 20 failures per 15 minutes (`LOGIN_IP_MAX_FAILURES`, `LOGIN_IP_WINDOW_MINUTES`). | api.md, .env.example |
 | D28 | **GitHub Actions** (the remote is private): `.github/workflows/checks.yml` runs the `check.ps1` steps on ubuntu-latest with a PostgreSQL 17 service container, on push to master and on pull requests; a newer push cancels an older run. Only generated, per-run secrets. | README.md |
 | D29 | **No `/me` endpoint** (CLAUDE.md): the signed-in user and their permissions come back from login, TOTP, confirm and refresh. | api.md |
+
+## 13 November 2026 (Week 2 review)
+
+| # | Decision | Docs updated |
+| --- | --- | --- |
+| D30 | **Refresh rate limit: Week 8 hardening.** `POST /auth/refresh` has no rate limit of its own yet (it already needs a valid, unrevoked refresh token and the CSRF header). Add a per-IP and per-session-family limit in Week 8 with the other hardening (security.md "Rate limits"). No change in Week 2. | week-08 at build time |
+| D31 | **Multi-tab refresh:** the frontend runs every refresh inside a Web Lock (`navigator.locks`, lock `arms-auth-refresh`) and shares the result on a BroadcastChannel (`arms-auth`), so only one tab calls `/auth/refresh` at a time and the others use its new access token; sign-out is broadcast too. Prevents two tabs from tripping reuse detection. | — (code: `frontend/src/lib/refresh-coordinator.ts`) |
+| D32 | **Password policy:** a password may not contain the user's own mobile number (the 10 digits, separators ignored) or name (the full name without spaces, or any word of it with 3 or more letters), ignoring case. Code `PASSWORD_TOO_PERSONAL` (422). Checked on change password, owner creation and staff creation with a given password. | api.md, security.md |
