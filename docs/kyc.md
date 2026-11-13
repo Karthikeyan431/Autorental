@@ -11,7 +11,7 @@ Staff take each driver through these steps in one wizard. Identity and licence a
 5. **Licence check:** one of the methods below.
 6. **Staff decision:** a checklist per check, then approve, reject (reason required), or ask for documents again (reason required). Staff can decide by default (N2); the owner can reopen. Approval needs every required checklist item ticked (`CHECKLIST_INCOMPLETE`). "Ask for documents again" (`resubmission_required`) lets staff start a new attempt; "Reject" is final and only an owner reopen changes it (D34).
 
-**Who sees KYC (D33):** the owner, the managing staff member and staff with `drivers.edit_any`. Everyone else gets 404 for KYC documents, details, consents, eligibility and decisions, and does not see the KYC parts of the activity timeline. The driver photo is visible to all staff.
+**Who sees KYC (D33):** the owner, the managing staff member and staff with `drivers.edit_any`. Everyone else gets 404 for KYC documents, details, consents, eligibility and decisions, and does not see the KYC parts of the activity timeline. The driver photo is visible to all staff. **From Week 4 (D46):** opening document images and deciding (approve, reject, ask for documents again) are for the owner and the current manager only; staff with `drivers.edit_any` keep the masked KYC status and details. If a manager is away, the owner changes the manager. Identity values are masked by default and revealed one field at a time by the owner or the current manager (D45).
 7. **Eligibility** is recomputed. Drafts show what is still missing.
 
 ## Identity methods

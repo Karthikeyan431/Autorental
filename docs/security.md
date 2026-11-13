@@ -17,7 +17,7 @@ Target: OWASP ASVS level 1 at launch. The app holds identity documents and money
 
 - Permission codes are listed in `api.md`. Every route declares its permission, and a test lists every route and fails if one has no declared permission.
 - Staff can edit only the drivers they manage (N1 default); reads follow N1. Editing a driver you can see but may not edit gives 403 `DRIVER_NOT_EDITABLE` (D37).
-- Return 404, not 403, for a record the user is not allowed to see. KYC documents, details, consents and decisions are visible only to the owner, the managing staff member and staff with `drivers.edit_any` (D33).
+- Return 404, not 403, for a record the user is not allowed to see. KYC documents, details, consents and decisions are visible only to the owner, the managing staff member and staff with `drivers.edit_any` (D33). From Week 4, document images and KYC decisions are for the owner and the current manager only (D46), and identity fields are masked, encrypted at rest (address, dates of birth, licence number) and revealed one field at a time with an audit entry (D45, D46).
 
 ## Data protection
 
