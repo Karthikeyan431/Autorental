@@ -8,7 +8,7 @@ import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useToast } from '../../components/ui/useToast';
-import { ApiError } from '../../lib/api';
+import { errorMessage } from '../../lib/errors';
 import { strings } from '../../lib/strings';
 import { changePassword } from './api';
 import { homePath, useAuth } from './auth-context';
@@ -47,7 +47,7 @@ export default function ChangePasswordPage() {
         navigate(homePath(updated), { replace: true });
       }
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : strings.common.somethingWentWrong);
+      setError(errorMessage(e));
       form.reset({ current: '', next: '', again: '' });
     }
   });

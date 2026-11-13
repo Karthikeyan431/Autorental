@@ -16,6 +16,28 @@ backups (`docs/deployment.md`, "Backups"):
 | `FILE_ENCRYPTION_KEYS`, `ACTIVE_FILE_KEY_ID` | Decrypts every stored document and photo | Add a new key id; old ids must stay available |
 | `LOOKUP_HMAC_KEY` | Duplicate checks for licence numbers | **Never rotate.** Losing or changing it breaks duplicate detection for every stored licence number (D36) |
 
+## Phone testing over Wi-Fi (development only)
+
+`.\scripts\dev.ps1 -Lan` serves the app at `https://<pc-ip>:5173` with a self-signed
+certificate made on this PC by `@vitejs/plugin-basic-ssl`. It is stored under
+`frontend\node_modules\.vite\basic-ssl` (ignored by git) and is valid for about a month; the
+plugin makes a new one when it expires. Production does not use it: Caddy gets a real
+certificate from Let's Encrypt.
+
+What you see on the phone the first time (and again after the certificate is renewed):
+
+- **Chrome (Android):** "Your connection is not private" (`NET::ERR_CERT_AUTHORITY_INVALID`).
+  Tap **Advanced**, then **Proceed to <pc-ip> (unsafe)**. Chrome remembers this for a while.
+- **Safari (iPhone):** "This Connection Is Not Private". Tap **Show Details**, then
+  **visit this website**, then **Visit Website**.
+- The address bar shows "Not secure" or a crossed-out padlock. That is expected for a
+  self-signed certificate; the page is still a secure context, so sign-in, "Take photo", the
+  live camera and the refresh lock work.
+
+Only accept this warning for your own PC's address on your own Wi-Fi, never for any other site.
+If you open `http://` instead of `https://`, the app shows an "Open this app over HTTPS"
+banner: sign-in cookies and the live camera do not work over plain http.
+
 ## Owner account recovery
 
 Use this when the owner forgets their password, is locked out, or loses the phone with the

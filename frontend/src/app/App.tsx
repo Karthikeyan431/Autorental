@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { BrowserRouter } from 'react-router';
 
+import { InsecureContextBanner } from '../components/InsecureContextBanner';
 import { ToastProvider } from '../components/ui/Toast';
 import { AuthProvider } from '../features/auth/AuthProvider';
 import { AppRoutes } from './AppRoutes';
@@ -15,6 +16,7 @@ export function App() {
   );
   return (
     <QueryClientProvider client={queryClient}>
+      <InsecureContextBanner />
       <ToastProvider>
         <AuthProvider>
           <BrowserRouter>

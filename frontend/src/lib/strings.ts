@@ -63,6 +63,11 @@ export const strings = {
     close: 'Close',
     tryAgain: 'Try again',
     somethingWentWrong: 'Something went wrong.',
+    somethingWentWrongRef: (ref: string) => `Something went wrong (ref: ${ref}).`,
+    insecureTitle: 'Open this app over HTTPS',
+    insecureBody:
+      'This page was opened over plain http, so sign-in, the camera and other security features ' +
+      'may not work. Open the https:// address instead.',
     requestId: (id: string) => `Request id: ${id}`,
     nothingHereYet: 'Nothing here yet.',
   },

@@ -79,10 +79,12 @@ If PowerShell blocks scripts, run them as
    Private). Check with `Get-NetConnectionProfile`.
 2. Allow port 5173 on Private networks only, once, in an **Administrator** PowerShell:
    `New-NetFirewallRule -DisplayName 'ARMS dev (Vite 5173, Private)' -Direction Inbound -Protocol TCP -LocalPort 5173 -Action Allow -Profile Private`
-3. Run `.\scripts\dev.ps1 -Lan` and open the printed `http://<your-pc-ip>:5173` on the phone.
-   The API runs with `DEV_INSECURE_COOKIES=true` for this session only, so sign-in survives
-   reloads over plain http. "Take photo" opens the phone camera; the live in-page camera needs
-   https and is hidden.
+3. Run `.\scripts\dev.ps1 -Lan` and open the printed **`https://<your-pc-ip>:5173`** on the
+   phone (note **https**). Vite serves HTTPS with a self-signed certificate made on this PC, so
+   the phone gets a secure context: sign-in cookies, "Take photo", the live camera and Web
+   Locks all work. The first time, the phone warns that the connection is not private; accept
+   it once (`docs/handover.md`, "Phone testing over Wi-Fi"). Opening `http://` instead shows an
+   "Open this app over HTTPS" banner.
 4. When you are done, remove the rule (Administrator PowerShell):
    `Remove-NetFirewallRule -DisplayName 'ARMS dev (Vite 5173, Private)'`
 

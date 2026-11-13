@@ -49,6 +49,7 @@ Transitive runtime packages (Starlette, anyio, Mako, python-dotenv and others) a
 | typescript | 6.0.3 | Apache-2.0 | 1 | Types. 7.0.2 is newer, but `typescript-eslint` 8.72 supports only `<6.1` |
 | vite | 8.3.8 | MIT | 1 | Dev server and build |
 | @vitejs/plugin-react | 6.3.0 | MIT | 1 | React support for Vite |
+| @vitejs/plugin-basic-ssl | 2.3.0 | MIT | 3 | Self-signed HTTPS for `dev.ps1 -Lan` only (dev) |
 | tailwindcss, @tailwindcss/vite | 4.3.5 | MIT | 1 | Styles |
 | vitest | 5.1.0 | MIT | 1 | Tests (dev) |
 | jsdom | 31.0.0 | MIT | 1 | Browser environment for tests (dev) |

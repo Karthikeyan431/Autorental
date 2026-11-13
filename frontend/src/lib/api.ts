@@ -47,8 +47,23 @@ function isEnvelope(value: unknown): value is Envelope {
   );
 }
 
-export function newRequestId(): string {
-  return crypto.randomUUID().replaceAll('-', '');
+/**
+ * 32 hex characters for X-Request-ID. crypto.randomUUID exists only in a secure context
+ * (https or localhost); over plain http (for example a phone on the LAN) it is missing, so fall
+ * back to getRandomValues, which every context has. The id only correlates logs; it is not a
+ * secret.
+ */
+export function newRequestId(cryptoImpl: Partial<Crypto> | undefined = globalThis.crypto): string {
+  if (typeof cryptoImpl?.randomUUID === 'function') {
+    return cryptoImpl.randomUUID().replaceAll('-', '');
+  }
+  const bytes = new Uint8Array(16);
+  if (typeof cryptoImpl?.getRandomValues === 'function') {
+    cryptoImpl.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export type ApiRequestInit = Omit<RequestInit, 'body'> & {
@@ -60,6 +75,8 @@ export type ApiRequestInit = Omit<RequestInit, 'body'> & {
   responseType?: 'json' | 'blob';
 };
 
+// Sign-in, 2-step, setup and refresh calls never trigger the silent refresh: a 401 there is
+// the answer itself (wrong password, expired challenge), not an expired access token.
 const AUTH_PATH = '/api/v1/auth/';
 
 export async function apiFetch<T>(path: string, init: ApiRequestInit = {}): Promise<T> {

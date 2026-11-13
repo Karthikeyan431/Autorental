@@ -14,6 +14,7 @@ import { Select } from '../../components/ui/Select';
 import { Table, type Column } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/useToast';
 import { ApiError } from '../../lib/api';
+import { errorMessage } from '../../lib/errors';
 import { formatDateTime } from '../../lib/format';
 import { strings } from '../../lib/strings';
 import type { User } from '../auth/api';
@@ -43,10 +44,6 @@ type Action =
   | { kind: 'reset'; user: User }
   | { kind: 'permissions'; user: User }
   | { kind: 'temporary'; name: string; password: string };
-
-function errorMessage(error: unknown): string {
-  return error instanceof ApiError ? error.message : strings.common.somethingWentWrong;
-}
 
 const staffSchema = z.object({
   name: z.string().trim().min(1, s.nameRequired).max(100),

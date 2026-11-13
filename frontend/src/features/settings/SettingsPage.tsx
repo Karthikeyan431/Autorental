@@ -13,7 +13,7 @@ import { Loading } from '../../components/ui/Loading';
 import { Select } from '../../components/ui/Select';
 import { Table, type Column } from '../../components/ui/Table';
 import { useToast } from '../../components/ui/useToast';
-import { ApiError } from '../../lib/api';
+import { errorMessage } from '../../lib/errors';
 import { formatDateTime, formatRupees } from '../../lib/format';
 import { paiseToRupeesInput, parseRupeesToPaise } from '../../lib/money';
 import { strings } from '../../lib/strings';
@@ -199,7 +199,7 @@ function SettingsForm({ current }: { current: SettingsVersion | null }) {
       setPending(null);
       setReason('');
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : strings.common.somethingWentWrong);
+      setError(errorMessage(e));
       setPending(null);
     } finally {
       setSaving(false);

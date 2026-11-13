@@ -77,7 +77,7 @@ docs/        requirements, rules, data model, milestones
 .\scripts\setup.ps1      # one-time from a fresh clone: .venv (3.12), packages, db-setup, migrations
 .\scripts\db-setup.ps1   # roles, databases, backend\.env; never changes an existing role's password (-RotatePasswords to rotate, -DryRun to preview)
 .\scripts\dev.ps1        # migrations, then API (uvicorn --reload, :8000, own window) and Vite (:5173, proxies /api)
-.\scripts\dev.ps1 -Lan   # phone testing on the home Wi-Fi: Vite on the LAN IP, DEV_INSECURE_COOKIES=true (dev only)
+.\scripts\dev.ps1 -Lan   # phone testing on the home Wi-Fi: Vite on the LAN IP over HTTPS (self-signed, dev only)
 .\scripts\check.ps1      # the gate: ruff, mypy, pytest, pip-audit, eslint, tsc, vitest, npm audit
 .\scripts\seed.ps1       # load fake demo data into the dev database (refuses APP_ENV=production); users need SEED_DEV_PASSWORD
 .\scripts\create-owner.ps1   # first run: create the single owner account (terminal prompts, no default password)

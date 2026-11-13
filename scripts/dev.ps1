@@ -10,11 +10,12 @@
   Press Ctrl+C to stop Vite; the API window is closed too.
 
   -Lan (development only): phone testing over the home Wi-Fi. Vite listens on this PC's LAN
-  address instead of 127.0.0.1 and the URL to open on the phone is printed. The API stays on
-  127.0.0.1 (Vite forwards /api). The API is started with DEV_INSECURE_COOKIES=true so sign-in
-  survives reloads over plain http; the app refuses that setting unless APP_ENV=development.
-  Over plain http the phone uses its camera app ("Take photo"); the live in-page camera needs
-  https and is hidden.
+  address with HTTPS (a self-signed certificate made on this PC by @vitejs/plugin-basic-ssl,
+  kept under frontend\node_modules\.vite, never in git) and prints the https:// URL to open on
+  the phone. HTTPS gives the phone a secure context, so sign-in cookies (always Secure), the
+  live camera and Web Locks all work. The phone warns about the certificate the first time;
+  docs/handover.md says how to accept it. The API stays on 127.0.0.1 (Vite forwards /api and
+  adds X-Forwarded-For, which uvicorn trusts only from 127.0.0.1).
 
   Windows Firewall must allow port 5173 on Private networks only. In an Administrator PowerShell:
     New-NetFirewallRule -DisplayName 'ARMS dev (Vite 5173, Private)' -Direction Inbound -Protocol TCP -LocalPort 5173 -Action Allow -Profile Private
@@ -78,26 +79,26 @@ if (-not $SkipMigrations) {
 }
 
 Write-Host '==> API on http://127.0.0.1:8000 (own window)' -ForegroundColor Cyan
-# --no-access-log: uvicorn's access log would record client IPs and query strings;
-# the app logs each request itself without them.
-# The API inherits this process's environment. Only -Lan sets DEV_INSECURE_COOKIES, and only
-# for this run (the app refuses it unless APP_ENV=development).
-$previousCookies = $env:DEV_INSECURE_COOKIES
-if ($Lan) { $env:DEV_INSECURE_COOKIES = 'true' }
+# --no-access-log: uvicorn's access log would record client IPs and query strings; the app
+# logs one line per request itself (method, path, status, duration, request id).
+# --forwarded-allow-ips 127.0.0.1: trust X-Forwarded-For only from the Vite proxy on this PC.
 $api = Start-Process -FilePath $python -WorkingDirectory $backend -PassThru -ArgumentList @(
     '-m', 'uvicorn', 'app.main:create_app', '--factory', '--reload',
-    '--host', '127.0.0.1', '--port', '8000', '--no-access-log'
+    '--host', '127.0.0.1', '--port', '8000', '--no-access-log',
+    '--forwarded-allow-ips', '127.0.0.1'
 )
-
-$env:DEV_INSECURE_COOKIES = $previousCookies
 
 try {
     Push-Location $frontend
     try {
         if ($Lan) {
-            Write-Host "==> Web app for your phone: http://${lanIp}:5173  (same Wi-Fi; Ctrl+C to stop)" -ForegroundColor Green
-            Write-Host '    Sign-in cookies are not Secure in this mode (development only).'
-            & npm.cmd run dev -- --host $lanIp
+            Write-Host "==> Web app for your phone: https://${lanIp}:5173  (same Wi-Fi; Ctrl+C to stop)" -ForegroundColor Green
+            Write-Host '    First visit: the phone warns about the certificate. Tap Advanced, then Proceed (docs/handover.md).'
+            # Only for this Vite run: HTTPS and X-Forwarded-For (vite.config.ts).
+            $previousLan = $env:ARMS_DEV_LAN
+            $env:ARMS_DEV_LAN = '1'
+            try { & npm.cmd run dev -- --host $lanIp }
+            finally { $env:ARMS_DEV_LAN = $previousLan }
         }
         else {
             Write-Host '==> Web app on http://127.0.0.1:5173  (Ctrl+C to stop)' -ForegroundColor Cyan

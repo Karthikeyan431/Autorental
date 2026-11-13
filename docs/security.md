@@ -42,7 +42,9 @@ Target: OWASP ASVS level 1 at launch. The app holds identity documents and money
 - **CSRF:** cookie-based refresh plus `SameSite=Strict`, and a double-submit token on `/auth/refresh`.
 - **Rate limits:** login, refresh, uploads and statement import.
 - **Uploads:** check the real file type and size; strip EXIF; refuse decompression bombs; never serve uploads inline as HTML, and serve PDFs only as attachments (D40).
-- **Development only:** `DEV_INSECURE_COOKIES=true` (for `dev.ps1 -Lan`) drops the Secure cookie flag; the app refuses to start with it unless `APP_ENV=development` (D39).
+- **Cookies are always Secure**, in every environment. Phone testing (`dev.ps1 -Lan`) uses HTTPS with a self-signed development certificate instead of dropping the flag (D43; `DEV_INSECURE_COOKIES` was removed).
+- **Client IP:** taken from `X-Forwarded-For` only when the connection comes from the trusted local proxy (`--forwarded-allow-ips 127.0.0.1`: the Vite proxy in development, Caddy in production); otherwise the connection's own address (D44).
+- **Logs:** one access line per request (method, path without the query string, status, duration, request id), never bodies. Validation errors never carry pydantic's `input` or `ctx`, in responses or logs (D44).
 - **Dependencies:** `pip-audit` and `npm audit` (both free) run in `check.ps1`.
 
 ## Backups and recovery (free)
