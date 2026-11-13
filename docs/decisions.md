@@ -38,3 +38,15 @@ Decisions made with the agency lead. Client-facing rule changes still need the c
 | D20 | **The rent due time has no default.** From Week 5, agreement activation and accrual refuse with `RENT_DUE_TIME_NOT_SET` ("Set the rent due time in Settings") while it is not set, with tests. | week-05, CLAUDE.md |
 | D21 | **ISO weekdays everywhere:** 1 = Monday ... 7 = Sunday. Python uses `isoweekday()` (`app.core.time.iso_weekday`); the frontend uses `isoWeekday()`, and ESLint bans `getDay()`/`getUTCDay()`. Tested on both sides. | CLAUDE.md, data-model.md, week-05 |
 | D22 | **`db-setup.ps1` never changes an existing role's password.** It only creates what is missing. With roles present and no `.env` it refuses (exit 2). `-RotatePasswords` rotates on request; `-DryRun` previews. Tested with dry runs against a temporary env file. | README.md, CLAUDE.md |
+
+## 13 November 2026 (Week 2 plan approval)
+
+| # | Decision | Docs updated |
+| --- | --- | --- |
+| D23 | **@hookform/resolvers 7.0.6** (MIT) approved. **qrcode 8.2** brought forward from Week 6 to draw the owner's TOTP QR as SVG; its licence was checked (BSD-3-Clause). | dependencies.md |
+| D24 | **Common-password list:** SecLists `10k-most-common.txt` (MIT) is committed unmodified, with its source and licence recorded. | dependencies.md |
+| D25 | **Audit log in Week 2:** a minimal owner-only list (`GET /audit-logs`, newest first, paginated) and `GET /audit-logs/verify`. Filters and export stay in Week 8. | api.md |
+| D26 | **Owner TOTP enrolment** happens at the owner's first sign-in in the browser. Until enrolment is confirmed, the challenge token allows only `/auth/totp/setup` and `/auth/totp/confirm`. Recovery codes are shown once, and the owner must tick "I have saved these codes" to continue. | api.md, security.md |
+| D27 | **Lockout response:** 429 `ACCOUNT_LOCKED` with "Too many attempts. Try again in 15 minutes." The IP throttle is 20 failures per 15 minutes (`LOGIN_IP_MAX_FAILURES`, `LOGIN_IP_WINDOW_MINUTES`). | api.md, .env.example |
+| D28 | **GitHub Actions** (the remote is private): `.github/workflows/checks.yml` runs the `check.ps1` steps on ubuntu-latest with a PostgreSQL 17 service container, on push to master and on pull requests; a newer push cancels an older run. Only generated, per-run secrets. | README.md |
+| D29 | **No `/me` endpoint** (CLAUDE.md): the signed-in user and their permissions come back from login, TOTP, confirm and refresh. | api.md |
