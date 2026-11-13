@@ -114,3 +114,30 @@ def test_passwords_are_never_printed(tmp_path: Path) -> None:
     combined = result.stdout + result.stderr
     assert "postgresql+psycopg://" not in combined
     assert "PASSWORD" not in combined.upper().replace("PASSWORDS", "")
+
+
+def test_a_missing_lookup_key_is_added_to_an_existing_env_file(
+    tmp_path: Path, app_engine: Engine
+) -> None:
+    # Week 3 added LOOKUP_HMAC_KEY: an older backend/.env gets it without other changes.
+    env_file = tmp_path / "older.env"
+    original = "APP_ENV=development\nDATABASE_URL=postgresql+psycopg://app_user:abc@localhost/x\n"
+    env_file.write_text(original, encoding="utf-8")
+
+    result = _run(env_file)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "add a new LOOKUP_HMAC_KEY" in result.stdout
+    assert "Dry run: nothing was changed." in result.stdout
+    assert env_file.read_text(encoding="utf-8") == original
+    _assert_current_passwords_still_work(app_engine)
+
+
+def test_an_existing_lookup_key_is_never_replaced(tmp_path: Path) -> None:
+    env_file = tmp_path / "current.env"
+    env_file.write_text(
+        "APP_ENV=development\nLOOKUP_HMAC_KEY=existing-test-value\n", encoding="utf-8"
+    )
+    result = _run(env_file)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "LOOKUP_HMAC_KEY" not in result.stdout

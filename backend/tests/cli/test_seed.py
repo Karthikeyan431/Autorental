@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 from app.cli.seed import SeedRefusedError, seed
 from app.core.config import Settings
 from app.core.security import verify_password
+from app.modules.drivers.models import Driver
+from app.modules.kyc.models import KycCheck, LicenceDetails
 from app.modules.settings.models import SettingsVersion
 from app.modules.users.models import User
 from app.modules.users.service import create_owner
@@ -36,7 +38,7 @@ def _run_cli(env_overrides: dict[str, str]) -> subprocess.CompletedProcess[str]:
 
 
 def test_cli_seeds_in_a_fresh_process(
-    test_settings: Settings, app_engine: Engine, clean_db: None
+    test_settings: Settings, app_engine: Engine, clean_db: None, tmp_path: Path
 ) -> None:
     # A fresh interpreter catches missing model imports that the test process would hide.
     result = _run_cli(
@@ -44,6 +46,10 @@ def test_cli_seeds_in_a_fresh_process(
             "APP_ENV": "development",
             "DATABASE_URL": test_settings.DATABASE_URL,
             "SEED_DEV_PASSWORD": "Seed-dev-pass-0001",
+            "DOCUMENTS_DIR": str(tmp_path),
+            "FILE_ENCRYPTION_KEYS": test_settings.FILE_ENCRYPTION_KEYS.get_secret_value(),
+            "ACTIVE_FILE_KEY_ID": test_settings.ACTIVE_FILE_KEY_ID,
+            "LOOKUP_HMAC_KEY": test_settings.LOOKUP_HMAC_KEY.get_secret_value(),
         }
     )
     assert result.returncode == 0, result.stderr
@@ -52,6 +58,7 @@ def test_cli_seeds_in_a_fresh_process(
     with Session(app_engine) as check:
         assert check.scalar(select(func.count()).select_from(SettingsVersion))
         assert check.scalar(select(func.count()).select_from(User)) == 3
+        assert check.scalar(select(func.count()).select_from(Driver)) == 5
 
 
 def test_cli_refuses_production(test_settings: Settings) -> None:
@@ -93,9 +100,13 @@ def test_seeded_business_details_are_visibly_fake(owner_db: Session) -> None:
 SEED_PASSWORD = "Seed-dev-pass-0001"
 
 
-def test_seed_adds_a_fake_owner_and_two_staff(owner_db: Session) -> None:
+def _dev(tmp_path: Path, **extra: object) -> Settings:
+    return make_settings(APP_ENV="development", DOCUMENTS_DIR=tmp_path, **extra)
+
+
+def test_seed_adds_a_fake_owner_and_two_staff(owner_db: Session, tmp_path: Path) -> None:
     owner_db.execute(text("TRUNCATE users RESTART IDENTITY CASCADE"))
-    seed(owner_db, make_settings(APP_ENV="development", SEED_DEV_PASSWORD=SEED_PASSWORD))
+    seed(owner_db, _dev(tmp_path, SEED_DEV_PASSWORD=SEED_PASSWORD))
     users = owner_db.scalars(select(User).order_by(User.id)).all()
 
     assert [u.role for u in users] == ["owner", "staff", "staff"]
@@ -106,10 +117,7 @@ def test_seed_adds_a_fake_owner_and_two_staff(owner_db: Session) -> None:
         assert verify_password(user.password_hash, SEED_PASSWORD)
         assert user.must_change_password is False
 
-    assert (
-        seed(owner_db, make_settings(APP_ENV="development", SEED_DEV_PASSWORD=SEED_PASSWORD))
-        is False
-    )
+    assert seed(owner_db, _dev(tmp_path, SEED_DEV_PASSWORD=SEED_PASSWORD)) is False
     assert owner_db.scalar(select(func.count()).select_from(User)) == 3
 
 
@@ -125,12 +133,12 @@ def test_seed_refuses_a_weak_dev_password(owner_db: Session) -> None:
         seed(owner_db, make_settings(APP_ENV="development", SEED_DEV_PASSWORD="1234567890"))
 
 
-def test_seed_keeps_an_existing_owner(owner_db: Session) -> None:
+def test_seed_keeps_an_existing_owner(owner_db: Session, tmp_path: Path) -> None:
     owner_db.execute(text("TRUNCATE users RESTART IDENTITY CASCADE"))
     create_owner(
         owner_db, name="Test Owner Real", mobile="9000000099", email=None, password=SEED_PASSWORD
     )
-    seed(owner_db, make_settings(APP_ENV="development", SEED_DEV_PASSWORD=SEED_PASSWORD))
+    seed(owner_db, _dev(tmp_path, SEED_DEV_PASSWORD=SEED_PASSWORD))
     owners = owner_db.scalars(select(User).where(User.role == "owner")).all()
     assert [o.name for o in owners] == ["Test Owner Real"]
 
@@ -139,3 +147,35 @@ def test_seed_refuses_a_dev_password_with_a_demo_users_name(owner_db: Session) -
     owner_db.execute(text("TRUNCATE users RESTART IDENTITY CASCADE"))
     with pytest.raises(SeedRefusedError):
         seed(owner_db, make_settings(APP_ENV="development", SEED_DEV_PASSWORD="Demo-river-2026"))
+
+
+def test_seed_adds_five_obviously_fake_drivers(owner_db: Session, tmp_path: Path) -> None:
+    owner_db.execute(text("TRUNCATE users RESTART IDENTITY CASCADE"))
+    seed(owner_db, _dev(tmp_path, SEED_DEV_PASSWORD=SEED_PASSWORD))
+    drivers = owner_db.scalars(select(Driver).order_by(Driver.id)).all()
+
+    assert [d.full_name for d in drivers] == [f"Test Driver {n:03d} (DEMO)" for n in range(1, 6)]
+    for driver in drivers:
+        assert driver.mobile.startswith("+9190000")
+        assert "DEMO" in driver.address
+    statuses = {
+        (c.driver_id, c.check_type): c.status
+        for c in owner_db.scalars(select(KycCheck).where(KycCheck.is_current))
+    }
+    assert statuses[(drivers[0].id, "identity")] == "approved"
+    assert statuses[(drivers[0].id, "licence")] == "approved"
+    for details in owner_db.scalars(select(LicenceDetails)):
+        assert details.licence_number_last4.isdigit()
+        assert "DEMO" in (details.issuing_authority or "")
+    for value in [d.address for d in drivers]:
+        assert not re.search(r"\d{12}", value)
+
+    # Safe to run again: nothing is duplicated.
+    assert seed(owner_db, _dev(tmp_path, SEED_DEV_PASSWORD=SEED_PASSWORD)) is False
+    assert owner_db.scalar(select(func.count()).select_from(Driver)) == 5
+
+
+def test_seed_skips_drivers_without_staff(owner_db: Session, tmp_path: Path) -> None:
+    owner_db.execute(text("TRUNCATE users RESTART IDENTITY CASCADE"))
+    seed(owner_db, _dev(tmp_path))
+    assert owner_db.scalar(select(func.count()).select_from(Driver)) == 0
