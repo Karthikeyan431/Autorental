@@ -29,7 +29,9 @@ Staff take each driver through these steps in one wizard. Identity and licence a
 - **Store only:** name, date or year of birth, gender, the last 4 digits of the Aadhaar number, `qr_signature_valid`, time and checker. Never the full number, the raw QR, or the QR photo (unless the legal adviser says otherwise).
 - **Tests:** use synthetic payloads in the spec's format, signed with a **test key pair** that the tests generate. In tests, point the verifier at the test certificate. Assert that a genuine payload passes and that any changed byte fails. Never use a real Aadhaar QR in tests or fixtures.
 
-### b) UIDAI app, attested by staff (`uidai_app_attested`) — the default while N13 is open
+### b) UIDAI app, attested by staff (`uidai_app_attested`) — behind the flag `AADHAAR_APP_ATTEST_ENABLED` (default `false`, N13, D47)
+
+Until N13 is answered, identity is checked by manual review of the masked Aadhaar (method c) and the licence by the Parivahan lookup record.
 
 - Staff scan the driver's QR with UIDAI's free **Aadhaar QR Scanner** app on their own phone and compare the result with the person.
 - In our app they record: name, date or year of birth, last 4 digits, "signature shown as valid by the UIDAI app" (a yes or no attestation), and an optional screenshot with the number masked.

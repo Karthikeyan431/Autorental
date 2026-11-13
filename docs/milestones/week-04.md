@@ -1,14 +1,15 @@
 # Week 4: Free government checks, and autos
 
-**Goal:** add the free government verification methods (UIDAI Secure QR and the Parivahan lookup record) alongside manual review, and build auto management.
+**Goal:** add the free government verification methods (UIDAI Secure QR and the Parivahan lookup record) alongside manual review, and build auto management. Both Aadhaar methods are built behind flags that are **off by default** until the legal adviser answers N13 (D47); meanwhile identity is checked by manual review of the masked Aadhaar and the licence by the Parivahan lookup record.
 
-**Read first:** `docs/kyc.md` (identity methods a and b, licence method a), `docs/data-model.md` (autos, identity and licence details), `docs/business-rules.md` (rules 8, 2), `docs/open-questions.md` (N13, Q25, Q29, N15 to N19), `docs/decisions.md` (D45), `docs/requirements.md` section 3 (masked identity fields).
+**Read first:** `docs/kyc.md` (identity methods a and b, licence method a), `docs/data-model.md` (autos, identity and licence details), `docs/business-rules.md` (rules 8, 2), `docs/open-questions.md` (N13, Q25, Q29, N15 to N19), `docs/decisions.md` (D45 to D47), `docs/requirements.md` section 3 (masked identity fields).
 
 ## Build
 
-**UIDAI app attestation (`uidai_app_attested`), on by default**
+**UIDAI app attestation (`uidai_app_attested`), behind `AADHAAR_APP_ATTEST_ENABLED=false` (D47)**
 - A form for: name, date or year of birth, last 4 digits, "signature shown as valid in the UIDAI app" (yes or no), and an optional masked screenshot.
 - UI label: "Checked by staff with the UIDAI app".
+- Built the same way as in-app scanning: the flag is read at startup (add it to `config.py` and `.env.example`, default `false`); when it is off, the endpoint returns 404 and the UI hides the option. Until N13 is answered, identity is checked by manual review of the masked Aadhaar.
 
 **UIDAI Secure QR in the app (`uidai_qr`), behind `AADHAAR_QR_INAPP_ENABLED=false`**
 - **Back end:**
@@ -91,7 +92,7 @@ Agreements, rent and payments.
 - the stored record never contains more than the allowed fields (assert on the database row).
 - No real Aadhaar QR in fixtures (a test scans fixtures for 12-digit numbers).
 
-**Flag:** with the flag off, the endpoint returns 404; with it on, it works.
+**Flags:** for each of `AADHAAR_QR_INAPP_ENABLED` and `AADHAAR_APP_ATTEST_ENABLED`: both default to `false`; with the flag off, its endpoint returns 404 and the UI hides the option; with it on, it works. With both off, a driver can still be approved by manual review plus the Parivahan lookup.
 
 **Production guard:**
 - the app refuses to start with `APP_ENV=production` and the demo method on;
@@ -130,8 +131,9 @@ Agreements, rent and payments.
 
 ## Done when
 
-- [ ] A driver can be approved using UIDAI app attestation plus a Parivahan lookup, with no paid service.
+- [ ] A driver can be approved by manual review of the masked Aadhaar plus a Parivahan lookup, with no paid service.
 - [ ] The in-app QR path works in development with test payloads, and is off by default.
+- [ ] UIDAI app attestation works in development with its flag on, and is off by default.
 - [ ] Autos can be registered, with paper expiry alerts.
 - [ ] Identity fields are masked by default; only the owner and the current manager can reveal
       them, and each reveal is in the driver's Activity tab.
@@ -139,7 +141,7 @@ Agreements, rent and payments.
 
 ## You check
 
-1. Approve a fake driver with the attestation form and a Parivahan-style record (made-up data, made-up screenshot).
+1. With the default flags, approve a fake driver by manual review of a made-up masked Aadhaar and a Parivahan-style record (made-up data, made-up screenshot); the UIDAI options are hidden. Then set `AADHAAR_APP_ATTEST_ENABLED=true` in development, restart, and approve another with the attestation form.
 2. Add 3 autos; give one an insurance date 10 days ahead: an alert appears.
 3. Set `APP_ENV=production` with the demo method enabled: the app refuses to start.
 4. As a staff member who does not manage a driver, open that driver: address, date of birth
