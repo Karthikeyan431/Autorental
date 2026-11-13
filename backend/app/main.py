@@ -15,7 +15,10 @@ from app.core.request_context import REQUEST_ID_HEADER, RequestIdMiddleware
 from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import CSRF_HEADER
 from app.modules.auth.router import router as auth_router
+from app.modules.documents.router import router as documents_router
+from app.modules.drivers.router import router as drivers_router
 from app.modules.health.router import router as health_router
+from app.modules.kyc.router import router as kyc_router
 from app.modules.settings.router import router as settings_router
 from app.modules.users.router import router as users_router
 from app.version import __version__
@@ -60,6 +63,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(RequestIdMiddleware)
 
     # Every route declares its access rule (tests/api/test_route_registry.py).
-    for router in (health_router, auth_router, users_router, settings_router, audit_router):
+    for router in (
+        health_router,
+        auth_router,
+        users_router,
+        settings_router,
+        audit_router,
+        drivers_router,
+        kyc_router,
+        documents_router,
+    ):
         app.include_router(router, prefix=API_PREFIX)
     return app

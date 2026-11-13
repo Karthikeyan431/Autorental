@@ -51,6 +51,10 @@ class SettingsVersion(CreatedAtMixin, Base):
     permitted_licence_classes: Mapped[list[str]] = mapped_column(
         ARRAY(Text), nullable=False, server_default="{}"
     )
+    # N12: identity documents accepted for manual review (Week 3). Default: masked Aadhaar only.
+    accepted_id_types: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, server_default="{masked_aadhaar}"
+    )
     advance_adjustments_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true"
     )
