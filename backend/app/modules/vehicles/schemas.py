@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
-from app.core.identifiers import NoAadhaarStr
+from app.core.identifiers import NoAadhaarStr, contains_aadhaar_like
 from app.modules.drivers.schemas import UserRef
 
 VehicleStatus = Literal["available", "rented", "maintenance", "inactive"]
@@ -20,8 +20,12 @@ _REGISTRATION = re.compile(r"^[A-Z0-9]{4,12}$")
 
 
 def normalise_registration(value: str) -> str:
-    """Upper case, without spaces or hyphens: "xx 00-tt 0101" -> "XX00TT0101"."""
+    """Upper case, without spaces or hyphens: "xx 00-tt 0101" -> "XX00TT0101". A registration
+    number always has letters (the state code), so an all-digit value is refused: it could be a
+    full Aadhaar number (hard constraint 5)."""
     normalised = re.sub(r"[\s-]+", "", value).upper()
+    if contains_aadhaar_like(value) or normalised.isdigit():
+        raise ValueError("A registration number has letters; a 12-digit number is not allowed.")
     if not _REGISTRATION.fullmatch(normalised):
         raise ValueError("Enter the registration number: 4 to 12 letters and digits.")
     return normalised

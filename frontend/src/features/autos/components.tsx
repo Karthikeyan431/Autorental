@@ -58,7 +58,13 @@ const vehicleSchema = z.object({
   registration_number: z
     .string()
     .transform((v) => v.replace(/[\s-]+/g, '').toUpperCase())
-    .pipe(z.string().regex(/^[A-Z0-9]{4,12}$/, t.registrationInvalid)),
+    .pipe(
+      z
+        .string()
+        .regex(/^[A-Z0-9]{4,12}$/, t.registrationInvalid)
+        // A registration always has letters; an all-digit value could be an Aadhaar number.
+        .refine((v) => !/^\d+$/.test(v), t.registrationInvalid),
+    ),
   make: noFullNumber(z.string().trim().min(1, t.required).max(100)),
   model: noFullNumber(z.string().trim().min(1, t.required).max(100)),
   year: z.string().regex(/^((19[89]\d)|(20\d\d)|2100)?$/, t.yearInvalid),

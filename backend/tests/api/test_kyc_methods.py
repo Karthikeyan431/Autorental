@@ -433,12 +433,39 @@ def test_production_refuses_the_demo_flag() -> None:
 _TWELVE_DIGITS = re.compile(r"(?<!\d)\d{4}[\s-]?\d{4}[\s-]?\d{4}(?!\d)")
 
 
+def aadhaar_like_offenders(text: str) -> list[str]:
+    """Every 12-digit run (plain, or grouped 4-4-4 by spaces or hyphens) that could be a real
+    Aadhaar number. Allowed: runs starting with 0 or 1 (UIDAI never issues those, so they are
+    the refusal probes) and fake +91 90000 mobiles. Strict for everything starting with 2-9."""
+    offenders = []
+    for number in _TWELVE_DIGITS.findall(text):
+        digits = re.sub(r"\D", "", number)
+        if digits[0] in "01" or digits.startswith("9190000"):
+            continue
+        offenders.append(number)
+    return offenders
+
+
+def test_the_fixture_scan_flags_realistic_numbers() -> None:
+    """The scan below stays strict: a realistic number (built at runtime, so it is never a
+    literal in this file) is flagged in every format; the safe probes are not."""
+    from tests.api.aadhaar_probes import FORMATS, realistic_number
+
+    for first in range(2, 10):
+        for fmt in FORMATS:
+            probe = fmt(realistic_number(first))
+            assert aadhaar_like_offenders(f"name: Test {probe} end") == [probe]
+    assert aadhaar_like_offenders("Test 0000 1111 2222 and 123412341234") == []
+    assert aadhaar_like_offenders("+919000000001") == []
+
+
 def test_no_aadhaar_like_numbers_in_fixtures_or_seed() -> None:
     """No real Aadhaar number (or QR) in tests, fixtures or the seed (hard constraint 7).
 
     UIDAI never issues a number starting with 0 or 1, so the refusal probes the tests send
-    (123412341234, 0000 1111 2222) cannot be real; the only other 12-digit runs allowed are
-    fake +91 90000 mobile numbers."""
+    as literals (123412341234, 0000 1111 2222) cannot be real; the only other 12-digit runs
+    allowed are fake +91 90000 mobile numbers. Probes starting with 2-9 are built at runtime
+    (tests/api/aadhaar_probes.py) and never appear as literals."""
     repo = Path(__file__).resolve().parents[3]
     files = [
         *repo.joinpath("backend", "tests").rglob("*.py"),
@@ -446,11 +473,9 @@ def test_no_aadhaar_like_numbers_in_fixtures_or_seed() -> None:
         *repo.joinpath("frontend", "src", "test").rglob("*.ts"),
         *repo.joinpath("frontend", "src").rglob("*.test.ts*"),
     ]
-    offenders = []
-    for path in files:
-        for number in _TWELVE_DIGITS.findall(path.read_text(encoding="utf-8")):
-            digits = re.sub(r"\D", "", number)
-            if digits[0] in "01" or digits.startswith("9190000"):
-                continue
-            offenders.append((path.name, number))
+    offenders = [
+        (path.name, number)
+        for path in files
+        for number in aadhaar_like_offenders(path.read_text(encoding="utf-8"))
+    ]
     assert offenders == []

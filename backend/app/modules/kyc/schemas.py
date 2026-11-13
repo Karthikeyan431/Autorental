@@ -23,7 +23,7 @@ class ConsentCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     purpose: Literal["kyc", "aadhaar_qr"]
-    notice_version: Annotated[str, Field(min_length=1, max_length=50)]
+    notice_version: Annotated[NoAadhaarStr, Field(min_length=1, max_length=50)]
     method: Literal["in_person_signed", "in_person_checkbox"]
 
 
@@ -99,7 +99,9 @@ class LicenceDetailsIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    licence_number: Annotated[str, Field(min_length=1, max_length=40)] | None = None
+    # A licence number always starts with a state code, so a bare 12-digit run is refused like
+    # in every other field (hard constraint 5); real numbers have 13 digits after the letters.
+    licence_number: Annotated[NoAadhaarStr, Field(min_length=1, max_length=40)] | None = None
     name_on_licence: ShortText
     date_of_birth: date | None = None
     issue_date: date | None = None
