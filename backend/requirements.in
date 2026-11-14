@@ -17,3 +17,6 @@ qrcode==8.2
 # Week 3 (confirmed against PyPI on 2026-11-13)
 pillow==13.0.0
 python-multipart==0.0.33
+# Week 5 (confirmed against PyPI on 2026-11-14)
+reportlab==5.1.0
+apscheduler==3.11.3

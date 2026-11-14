@@ -5,7 +5,9 @@
 Seeds the first settings version and, when SEED_DEV_PASSWORD is set, a fake owner and 2 fake
 staff (Week 2) who all use that password, and 5 fake drivers in different KYC states (Week 3).
 and 5 fake autos with papers (Week 4; registration numbers XX00TT0001 to XX00TT0005: "XX" is
-not a state code). Never runs when APP_ENV=production. Safe to run more than once.
+not a state code), and one active agreement (Week 5: Test Driver 001 on XX00TT0001 at ₹300 a
+day from 2 days ago; run accrual to fill its ledger). Never runs when APP_ENV=production. Safe
+to run more than once.
 
 Driver documents are images drawn here that say "DEMO - not a real document"; licence numbers
 look like TEST-DL-0001 and identity last-4 digits are 0001 to 0005.
@@ -28,6 +30,9 @@ from app.core.errors import AppError
 from app.core.permissions import CurrentUser, effective_permissions
 from app.core.security import check_password_policy
 from app.core.time import business_date
+from app.modules.agreements import service as agreements_service
+from app.modules.agreements.models import Agreement
+from app.modules.agreements.schemas import AgreementCreate
 from app.modules.drivers import service as drivers_service
 from app.modules.drivers.models import Driver
 from app.modules.drivers.schemas import DriverCreate
@@ -337,6 +342,36 @@ def _seed_autos(session: Session, settings: Settings) -> bool:
     return True
 
 
+def _seed_agreement(session: Session, settings: Settings) -> bool:
+    """Week 5: one active agreement, so the ledger and dashboard have something to show."""
+    if session.scalar(select(exists().where(Agreement.id.is_not(None)))):
+        return False
+    driver = session.scalars(select(Driver).where(Driver.mobile == "+919000010001")).one_or_none()
+    vehicle = session.scalars(
+        select(Vehicle).where(Vehicle.registration_number == "XX00TT0001")
+    ).one_or_none()
+    if driver is None or vehicle is None:
+        return False
+    manager = session.get(User, driver.managed_by)
+    if manager is None:
+        return False
+    user = _as_current_user(session, manager)
+    agreement = agreements_service.create_draft(
+        session,
+        user,
+        AgreementCreate(
+            driver_id=driver.id,
+            vehicle_id=vehicle.id,
+            start_date=business_date() - timedelta(days=2),
+            daily_rent_paise=30000,  # ₹300, as in the worked example
+            advance_required_paise=200000,
+        ),
+        ip=None,
+    )
+    agreements_service.activate_agreement(session, user, agreement.id, settings=settings, ip=None)
+    return True
+
+
 def seed(session: Session, settings: Settings) -> bool:
     """Seed into the caller's transaction. Returns True if anything was inserted."""
     if settings.is_production:
@@ -350,7 +385,8 @@ def seed(session: Session, settings: Settings) -> bool:
         except AppError as exc:  # e.g. the password contains a demo user's name
             raise SeedRefusedError(f"SEED_DEV_PASSWORD is not acceptable: {exc.message}") from exc
     created = _seed_autos(session, settings) or created
-    return _seed_drivers(session, settings) or created
+    created = _seed_drivers(session, settings) or created
+    return _seed_agreement(session, settings) or created
 
 
 def main() -> int:
@@ -368,7 +404,7 @@ def main() -> int:
     finally:
         engine.dispose()
     print(
-        "Seeded the first settings version, demo users, drivers and autos."
+        "Seeded the first settings version, demo users, drivers, autos and an agreement."
         if created
         else "Seed data already present."
     )

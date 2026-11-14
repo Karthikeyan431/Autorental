@@ -19,8 +19,9 @@ from app.core.audit import AuditLog, write_audit
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.core.pagination import LIKE_ESCAPE, Page, PageParams, escape_like
-from app.core.permissions import CurrentUser
+from app.core.permissions import CurrentUser, Permission
 from app.core.time import utc_now
+from app.modules.agreements.models import Agreement
 from app.modules.documents.models import Document
 from app.modules.documents.service import store_document
 from app.modules.drivers import pii
@@ -51,6 +52,7 @@ from app.modules.drivers.schemas import (
     UserRef,
 )
 from app.modules.kyc.models import IdentityDetails, KycCheck, LicenceDetails
+from app.modules.rent.models import ChargeAdjustment, RentCharge
 from app.modules.settings.schemas import SettingsValues
 from app.modules.settings.service import get_current_settings
 from app.modules.users.models import User
@@ -73,7 +75,8 @@ def user_refs(session: Session, ids: Iterable[int | None]) -> dict[int, UserRef]
 def get_driver(session: Session, driver_id: int, *, lock: bool = False) -> Driver:
     statement = select(Driver).where(Driver.id == driver_id)
     if lock:
-        statement = statement.with_for_update()
+        # Re-read after waiting for the lock, so a row already in the session is never stale.
+        statement = statement.with_for_update().execution_options(populate_existing=True)
     driver = session.scalars(statement).one_or_none()
     if driver is None:
         raise not_found()
@@ -711,10 +714,28 @@ def lift_restriction(
 
 
 def timeline(session: Session, user: CurrentUser, driver_id: int) -> list[TimelineEntry]:
-    """The driver's activity from the audit log. KYC entries (consents, attempts, documents) only
+    """The driver's activity from the audit log: the driver, their agreements, and (for those who
+    may see their money) charge adjustments. KYC entries (consents, attempts, documents) only
     for users who may see this driver's KYC."""
     driver = get_driver(session, driver_id)
-    conditions = [and_(AuditLog.entity_type == "driver", AuditLog.entity_id == driver.id)]
+    agreement_ids = select(Agreement.id).where(Agreement.driver_id == driver.id)
+    conditions = [
+        and_(AuditLog.entity_type == "driver", AuditLog.entity_id == driver.id),
+        and_(AuditLog.entity_type == "agreement", AuditLog.entity_id.in_(agreement_ids)),
+    ]
+    if user.is_owner or user.has(Permission.REPORTS_ALL) or driver.managed_by == user.id:
+        # Charge adjustments are money figures (N1, D54): the owner, the manager, reports.all.
+        adjustment_ids = (
+            select(ChargeAdjustment.id)
+            .join(RentCharge, RentCharge.id == ChargeAdjustment.rent_charge_id)
+            .where(RentCharge.driver_id == driver.id)
+        )
+        conditions.append(
+            and_(
+                AuditLog.entity_type == "charge_adjustment",
+                AuditLog.entity_id.in_(adjustment_ids),
+            )
+        )
     if can_see_kyc(user, driver):
         check_ids = select(KycCheck.id).where(KycCheck.driver_id == driver.id)
         consent_ids = select(Consent.id).where(Consent.driver_id == driver.id)

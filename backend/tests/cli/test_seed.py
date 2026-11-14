@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,8 @@ from sqlalchemy.orm import Session
 from app.cli.seed import SeedRefusedError, seed
 from app.core.config import Settings
 from app.core.security import verify_password
+from app.core.time import business_date
+from app.modules.agreements.models import Agreement
 from app.modules.drivers.models import Driver
 from app.modules.drivers.pii import decrypt_driver_field
 from app.modules.kyc.models import KycCheck, LicenceDetails
@@ -187,7 +190,14 @@ def test_seed_adds_five_obviously_fake_autos(owner_db: Session, tmp_path: Path) 
     autos = owner_db.scalars(select(Vehicle).order_by(Vehicle.registration_number)).all()
     assert [v.registration_number for v in autos] == [f"XX00TT{n:04d}" for n in range(1, 6)]
     assert all("DEMO" in v.make for v in autos)
-    assert {v.status for v in autos} <= {"available", "maintenance"}
+    # Week 5: XX00TT0001 is rented through the demo agreement; the others as in Week 4.
+    assert [v.status for v in autos] == [
+        "rented",
+        "available",
+        "available",
+        "available",
+        "maintenance",
+    ]
 
     seed(owner_db, _dev(tmp_path, SEED_DEV_PASSWORD=SEED_PASSWORD))
     assert owner_db.scalar(select(func.count()).select_from(Vehicle)) == 5
@@ -197,3 +207,22 @@ def test_seed_skips_drivers_without_staff(owner_db: Session, tmp_path: Path) -> 
     owner_db.execute(text("TRUNCATE users RESTART IDENTITY CASCADE"))
     seed(owner_db, _dev(tmp_path))
     assert owner_db.scalar(select(func.count()).select_from(Driver)) == 0
+
+
+def test_seed_adds_one_active_agreement(owner_db: Session, tmp_path: Path) -> None:
+    """Week 5: Test Driver 001 (DEMO) has XX00TT0001 at ₹300 a day, activated through the
+    service (eligibility checked, audited). Safe to run again."""
+    owner_db.execute(text("TRUNCATE users RESTART IDENTITY CASCADE"))
+    seed(owner_db, _dev(tmp_path, SEED_DEV_PASSWORD=SEED_PASSWORD))
+    (agreement,) = owner_db.scalars(select(Agreement)).all()
+    driver = owner_db.get(Driver, agreement.driver_id)
+    vehicle = owner_db.get(Vehicle, agreement.vehicle_id)
+    assert driver is not None and vehicle is not None
+    assert (driver.full_name, vehicle.registration_number) == (
+        "Test Driver 001 (DEMO)",
+        "XX00TT0001",
+    )
+    assert (agreement.status, agreement.daily_rent_paise) == ("active", 30000)
+    assert agreement.start_date == business_date() - timedelta(days=2)
+    seed(owner_db, _dev(tmp_path, SEED_DEV_PASSWORD=SEED_PASSWORD))
+    assert owner_db.scalar(select(func.count()).select_from(Agreement)) == 1

@@ -73,7 +73,8 @@ def paper_state(valid_until: date, today: date, alert_days: int) -> PaperState:
 def get_vehicle(session: Session, vehicle_id: int, *, lock: bool = False) -> Vehicle:
     statement = select(Vehicle).where(Vehicle.id == vehicle_id)
     if lock:
-        statement = statement.with_for_update()
+        # Re-read after waiting for the lock, so a row already in the session is never stale.
+        statement = statement.with_for_update().execution_options(populate_existing=True)
     vehicle = session.scalars(statement).one_or_none()
     if vehicle is None:
         raise not_found()

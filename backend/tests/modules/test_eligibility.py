@@ -1,16 +1,18 @@
 """Rule 10: check_eligibility() as in docs/kyc.md. Each condition failing alone gives its reason."""
 
 from collections.abc import Callable
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.modules.agreements.models import Agreement
 from app.modules.drivers.models import Driver, DriverRestriction
 from app.modules.kyc.eligibility import check_eligibility
 from app.modules.kyc.models import KycCheck, LicenceDetails
 from app.modules.users.models import User
+from app.modules.vehicles.models import Vehicle
 from tests.helpers import make_settings
 
 TODAY = date(2026, 11, 13)
@@ -238,3 +240,32 @@ def test_several_failures_are_all_reported_in_order(db: Session, eligible_driver
         "LICENCE_NOT_APPROVED",
         "ACCOUNT_NOT_ACTIVE",
     ]
+
+
+def test_an_active_agreement_gives_already_assigned(db: Session, eligible_driver: Build) -> None:
+    """Week 5: has_active_agreement() reads the agreements table (rule 2)."""
+    driver = eligible_driver()
+    vehicle = Vehicle(registration_number="TT00EL0001", make="Demo", model="Test 3W")
+    db.add(vehicle)
+    db.flush()
+    agreement = Agreement(
+        driver_id=driver.id,
+        vehicle_id=vehicle.id,
+        status="draft",
+        start_date=TODAY,
+        daily_rent_paise=30000,
+        terms_version="test",
+        created_by=driver.created_by,
+    )
+    db.add(agreement)
+    db.flush()
+    assert _reasons(db, driver) == []  # a draft does not count
+    agreement.status = "active"
+    agreement.activated_at = datetime(2026, 11, 13, 4, 0, tzinfo=UTC)
+    db.flush()
+    assert _reasons(db, driver) == ["ALREADY_ASSIGNED"]
+    agreement.status = "ended"
+    agreement.end_date = TODAY
+    agreement.ended_at = datetime(2026, 11, 13, 12, 0, tzinfo=UTC)
+    db.flush()
+    assert _reasons(db, driver) == []

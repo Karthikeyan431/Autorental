@@ -40,6 +40,7 @@ class SettingsVersion(CreatedAtMixin, Base):
         ),
         CheckConstraint("weekly_mdr_warning_paise >= 0", name="mdr_warning_non_negative"),
         CheckConstraint("reveal_limit_per_hour >= 1", name="reveal_limit_positive"),
+        CheckConstraint("max_backdate_days >= 0", name="max_backdate_days_non_negative"),
         Index("ix_settings_versions_effective_from", "effective_from"),
     )
 
@@ -74,6 +75,8 @@ class SettingsVersion(CreatedAtMixin, Base):
         Integer, nullable=False, server_default="1"
     )
     reveal_limit_per_hour: Mapped[int] = mapped_column(Integer, nullable=False, server_default="30")
+    # N21: how many days before today an agreement may start (Week 5).
+    max_backdate_days: Mapped[int] = mapped_column(Integer, nullable=False, server_default="7")
     weekly_mdr_warning_paise: Mapped[int] = mapped_column(
         BigInteger, nullable=False, server_default="200000"
     )

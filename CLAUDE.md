@@ -84,6 +84,7 @@ docs/        requirements, rules, data model, milestones
 .\scripts\reset-password.ps1  # account recovery: new password, unlock, sign out everywhere, forced change (-ResetTotp clears the owner's 2-step)
 cd backend; ..\.venv\Scripts\alembic upgrade head
 cd backend; ..\.venv\Scripts\python -m app.jobs.run_all   # scheduled jobs once (licence expiry, vehicle papers)
+cd backend; ..\.venv\Scripts\python -m app.jobs.accrue    # rent accrual once (idempotent; exits 1 until the rent due time is set)
 ```
 
 CI: `.github/workflows/checks.yml` runs the same checks on GitHub (push to master, pull requests).

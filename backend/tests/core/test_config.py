@@ -112,3 +112,13 @@ def test_the_removed_insecure_cookie_setting_has_no_effect() -> None:
     old .env is ignored rather than honoured."""
     settings = make_settings(DEV_INSECURE_COOKIES=True)
     assert not hasattr(settings, "DEV_INSECURE_COOKIES")
+
+
+def test_production_refuses_the_dev_scheduler() -> None:
+    settings = make_settings(APP_ENV="production", DEV_SCHEDULER_ENABLED=True)
+    with pytest.raises(UnsafeConfigError, match="DEV_SCHEDULER_ENABLED"):
+        check_production_safety(settings)
+
+
+def test_the_dev_scheduler_is_off_by_default() -> None:
+    assert make_settings().DEV_SCHEDULER_ENABLED is False
