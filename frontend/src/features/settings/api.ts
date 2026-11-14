@@ -12,6 +12,8 @@ export type SettingsValues = {
   refunds_enabled: boolean;
   staff_limit: number;
   reveal_limit_per_hour: number;
+  /** N21: how many days before today an agreement may start (default 7). */
+  max_backdate_days: number;
   business_name: string | null;
   business_address: string | null;
   business_upi_id: string | null;

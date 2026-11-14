@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { paiseToRupeesInput, parseRupeesToPaise } from './money';
+import { paiseToRupeesInput, parseRupeesToPaise, parseSignedRupeesToPaise } from './money';
 
 describe('parseRupeesToPaise', () => {
   it.each([
@@ -36,5 +36,20 @@ describe('paiseToRupeesInput', () => {
 
   it('refuses fractions of a paisa', () => {
     expect(() => paiseToRupeesInput(1.5)).toThrow(RangeError);
+  });
+});
+
+describe('parseSignedRupeesToPaise', () => {
+  it('reads waivers and additions as whole paise', () => {
+    expect(parseSignedRupeesToPaise('-300')).toBe(-30000);
+    expect(parseSignedRupeesToPaise('50.5')).toBe(5050);
+    expect(parseSignedRupeesToPaise('+50')).toBe(5000);
+    expect(parseSignedRupeesToPaise(' -1,200.25 ')).toBe(-120025);
+  });
+
+  it('refuses zero and anything that is not money', () => {
+    for (const text of ['0', '-0', '', '-', '--3', '3e2', '1.234', 'abc']) {
+      expect(parseSignedRupeesToPaise(text)).toBeNull();
+    }
   });
 });

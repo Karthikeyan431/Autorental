@@ -51,6 +51,7 @@ const schema = z.object({
   escalation_suggest_after_days: wholeNumber,
   staff_limit: wholeNumber.refine((v) => Number(v) >= 1, t.atLeastOne),
   reveal_limit_per_hour: wholeNumber.refine((v) => Number(v) >= 1, t.atLeastOne),
+  max_backdate_days: wholeNumber,
   advance_adjustments_enabled: z.boolean(),
   refunds_enabled: z.boolean(),
   permitted_licence_classes: z.string().max(500),
@@ -76,6 +77,7 @@ const EMPTY: Form = {
   escalation_suggest_after_days: '1',
   staff_limit: '10',
   reveal_limit_per_hour: '30',
+  max_backdate_days: '7',
   advance_adjustments_enabled: true,
   refunds_enabled: false,
   permitted_licence_classes: '',
@@ -99,6 +101,7 @@ function toForm(v: SettingsValues): Form {
     escalation_suggest_after_days: String(v.escalation_suggest_after_days),
     staff_limit: String(v.staff_limit),
     reveal_limit_per_hour: String(v.reveal_limit_per_hour),
+    max_backdate_days: String(v.max_backdate_days),
     advance_adjustments_enabled: v.advance_adjustments_enabled,
     refunds_enabled: v.refunds_enabled,
     permitted_licence_classes: v.permitted_licence_classes.join(', '),
@@ -123,6 +126,7 @@ function toValues(f: Form): Partial<SettingsValues> {
     escalation_suggest_after_days: Number(f.escalation_suggest_after_days),
     staff_limit: Number(f.staff_limit),
     reveal_limit_per_hour: Number(f.reveal_limit_per_hour),
+    max_backdate_days: Number(f.max_backdate_days),
     advance_adjustments_enabled: f.advance_adjustments_enabled,
     refunds_enabled: f.refunds_enabled,
     permitted_licence_classes: f.permitted_licence_classes
@@ -332,6 +336,12 @@ function SettingsForm({ current }: { current: SettingsVersion | null }) {
           inputMode="numeric"
           error={errors.reveal_limit_per_hour?.message}
           {...form.register('reveal_limit_per_hour')}
+        />
+        <Input
+          label={t.maxBackdateDays}
+          inputMode="numeric"
+          error={errors.max_backdate_days?.message}
+          {...form.register('max_backdate_days')}
         />
         <div className="flex flex-col justify-center gap-2">
           <Checkbox

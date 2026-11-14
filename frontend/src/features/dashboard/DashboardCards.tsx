@@ -6,7 +6,8 @@ import { strings } from '../../lib/strings';
 export type Card = {
   label: string;
   week: number;
-  value?: number | null;
+  /** A count, or text such as a rupee amount (already formatted). */
+  value?: number | string | null;
   to?: string;
   /** The link text (default "Open the KYC queue"). */
   linkLabel?: string;

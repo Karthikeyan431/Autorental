@@ -17,6 +17,7 @@ import { ApiError } from '../../lib/api';
 import { formatDate, formatDateTime } from '../../lib/format';
 import { errorMessage } from '../../lib/errors';
 import { strings } from '../../lib/strings';
+import { DriverAgreementsTab, LedgerTab } from '../agreements/components';
 import { can, useAuth } from '../auth/auth-context';
 import {
   AttemptDetails,
@@ -38,7 +39,7 @@ import {
 import { DriverDetailsForm } from './DriverDetailsForm';
 
 const t = strings.drivers;
-type Tab = 'details' | 'kyc' | 'activity';
+type Tab = 'details' | 'kyc' | 'agreement' | 'ledger' | 'activity';
 
 export default function DriverDetailPage() {
   const { id } = useParams();
@@ -73,6 +74,8 @@ export default function DriverDetailPage() {
   const tabs: { key: Tab; label: string }[] = [
     { key: 'details', label: t.tabs.details },
     { key: 'kyc', label: t.tabs.kyc },
+    { key: 'agreement', label: t.tabs.agreement },
+    { key: 'ledger', label: t.tabs.ledger },
     { key: 'activity', label: t.tabs.activity },
   ];
 
@@ -100,6 +103,16 @@ export default function DriverDetailPage() {
       <div role="tabpanel">
         {tab === 'details' && <DetailsTab driver={driver} />}
         {tab === 'kyc' && <KycTab driver={driver} />}
+        {tab === 'agreement' && (
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <DriverAgreementsTab driverId={driver.id} />
+          </div>
+        )}
+        {tab === 'ledger' && (
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <LedgerTab driverId={driver.id} />
+          </div>
+        )}
         {tab === 'activity' && <ActivityTab driver={driver} />}
       </div>
     </section>
