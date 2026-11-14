@@ -153,6 +153,7 @@ export const strings = {
     overdueAmount: 'Overdue rent',
     adjustmentsPending: 'Charge adjustments to decide',
     openAgreements: 'Open agreements',
+    openDrivers: 'Open drivers',
     runAccrual: 'Run rent accrual now',
     accrualDone: (created: number) =>
       created === 1 ? '1 rent charge added.' : `${created} rent charges added.`,
