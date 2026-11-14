@@ -4,6 +4,7 @@ import { useAuth } from '../auth/auth-context';
 import { strings } from '../../lib/strings';
 import { listDrivers } from '../drivers/api';
 import { fetchQueueCounts } from '../kyc/api';
+import { fetchPaymentsSummary } from '../payments/api';
 import { DashboardCards } from './DashboardCards';
 
 const d = strings.dashboard;
@@ -17,6 +18,8 @@ export default function StaffDashboardPage() {
     queryFn: () => listDrivers({ page: 1, search: '', status: '', managedBy: 'me', kyc: '' }),
   });
   const c = counts.data;
+  const payments = useQuery({ queryKey: ['payments-summary'], queryFn: fetchPaymentsSummary });
+  const pay = payments.data;
   return (
     <section className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold text-slate-900">{strings.pages.staffDashboard}</h1>
@@ -38,7 +41,13 @@ export default function StaffDashboardPage() {
             value: c ? c.pending + c.under_review + c.resubmission : null,
             to: '/kyc',
           },
-          { label: d.unpaidToday, week: 6 },
+          {
+            label: d.unpaidToday,
+            week: 6,
+            value: pay ? pay.unpaid_today : null,
+            to: '/pay-requests',
+            linkLabel: d.openPayRequests,
+          },
           { label: d.myEscalations, week: 7 },
         ]}
       />

@@ -83,5 +83,5 @@ def test_two_approvals_that_over_fill_one_day_one_is_refused(
     assert (refused.outcome, refused.code) == ("refused", "PAYMENT_NO_LONGER_FITS")
     assert refused.message
     with Session(app_engine) as check:
-        statuses = dict(check.execute(select(Payment.id, Payment.status)).tuples().all())
+        statuses = dict(check.execute(select(Payment.id, Payment.status)).all())
         assert statuses == {first.id: "awaiting_approval", second.id: "approved"}

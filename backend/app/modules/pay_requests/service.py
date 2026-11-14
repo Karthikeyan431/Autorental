@@ -286,9 +286,7 @@ def pay_requests_out(session: Session, rows: list[PayRequest]) -> list[PayReques
                 Payment.status == "awaiting_approval",
             )
             .group_by(Payment.pay_request_id)
-        )
-        .tuples()
-        .all()
+        ).all()
     )
     refs = user_refs(session, [d.managed_by for d in drivers.values()] + [r.sent_by for r in rows])
     upi_id = settings.business_upi_id if settings is not None else None

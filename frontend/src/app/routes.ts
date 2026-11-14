@@ -19,6 +19,7 @@ import EscalationsPage from '../features/escalations/EscalationsPage';
 import KycQueuePage from '../features/kyc/KycQueuePage';
 import KycReviewPage from '../features/kyc/KycReviewPage';
 import PayRequestsPage from '../features/pay-requests/PayRequestsPage';
+import PaymentDetailPage from '../features/payments/PaymentDetailPage';
 import PaymentsPage from '../features/payments/PaymentsPage';
 import ReportsPage from '../features/reports/ReportsPage';
 import SettingsPage from '../features/settings/SettingsPage';
@@ -183,6 +184,15 @@ export const APP_PAGES: AppPage[] = [
     week: 6,
     Component: PaymentsPage,
     inNav: true,
+    group: 'money',
+    inShell: true,
+  },
+  {
+    path: '/payments/:id',
+    title: p.payment,
+    week: 6,
+    Component: PaymentDetailPage,
+    inNav: false,
     group: 'money',
     inShell: true,
   },

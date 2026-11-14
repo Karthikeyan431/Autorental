@@ -226,9 +226,7 @@ def allocations_out(session: Session, rows: list[PaymentAllocation]) -> list[All
             select(RentCharge.id, RentCharge.rent_date).where(
                 RentCharge.id.in_({r.rent_charge_id for r in rows})
             )
-        )
-        .tuples()
-        .all()
+        ).all()
     )
     refs = user_refs(session, [r.confirmed_by for r in rows])
     return [
@@ -266,9 +264,7 @@ def payments_out(session: Session, user: CurrentUser, payments: list[Payment]) -
             select(ReversalRequest.payment_id, ReversalRequest.id).where(
                 ReversalRequest.payment_id.in_(ids), ReversalRequest.decision.is_(None)
             )
-        )
-        .tuples()
-        .all()
+        ).all()
     )
     refs = user_refs(
         session,
@@ -390,9 +386,7 @@ def receipt_pdf(session: Session, user: CurrentUser, payment_id: int) -> tuple[P
             select(RentCharge.id, RentCharge.rent_date).where(
                 RentCharge.id.in_({a.rent_charge_id for a in rows})
             )
-        )
-        .tuples()
-        .all()
+        ).all()
     )
     days = sorted(
         (ReceiptDay(dates[a.rent_charge_id], a.amount_paise) for a in rows),

@@ -1,4 +1,5 @@
-"""Development scheduling (APScheduler): rent accrual every 15 minutes inside the API process.
+"""Development scheduling (APScheduler): rent accrual and pay requests every 15 minutes inside
+the API process.
 
 On only when `APP_ENV=development` and `DEV_SCHEDULER_ENABLED=true`; production refuses to start
 with the flag on and uses the systemd timer instead (Week 8). The job is the same idempotent
@@ -10,6 +11,7 @@ import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.core import time as clock
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.modules.rent.accrual import accrue
@@ -30,6 +32,21 @@ def run_accrual(factory: sessionmaker[Session]) -> None:
     )
 
 
+def run_pay_requests_job(factory: sessionmaker[Session]) -> None:
+    # Imported here: the job module imports every model.
+    from app.jobs.pay_requests import run_pay_requests
+
+    try:
+        with factory() as session, session.begin():
+            result = run_pay_requests(session, clock.utc_now())
+    except AppError as exc:
+        _log.warning("pay requests skipped: %s", exc.code)
+        return
+    if isinstance(result, str):
+        return
+    _log.info("pay requests: %d created, %d superseded", result.created, result.superseded)
+
+
 def start_dev_scheduler(
     settings: Settings, factory: sessionmaker[Session]
 ) -> BackgroundScheduler | None:
@@ -42,6 +59,15 @@ def start_dev_scheduler(
         minutes=ACCRUAL_MINUTES,
         args=[factory],
         id="rent-accrual",
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        run_pay_requests_job,
+        "interval",
+        minutes=ACCRUAL_MINUTES,
+        args=[factory],
+        id="pay-requests",
         max_instances=1,
         coalesce=True,
     )
