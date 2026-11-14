@@ -18,6 +18,7 @@ import { formatDate, formatDateTime } from '../../lib/format';
 import { errorMessage } from '../../lib/errors';
 import { strings } from '../../lib/strings';
 import { DriverAgreementsTab, LedgerTab } from '../agreements/components';
+import { DriverPaymentsTab } from '../payments/DriverPaymentsTab';
 import { can, useAuth } from '../auth/auth-context';
 import {
   AttemptDetails,
@@ -39,7 +40,7 @@ import {
 import { DriverDetailsForm } from './DriverDetailsForm';
 
 const t = strings.drivers;
-type Tab = 'details' | 'kyc' | 'agreement' | 'ledger' | 'activity';
+type Tab = 'details' | 'kyc' | 'agreement' | 'ledger' | 'payments' | 'activity';
 
 export default function DriverDetailPage() {
   const { id } = useParams();
@@ -76,6 +77,7 @@ export default function DriverDetailPage() {
     { key: 'kyc', label: t.tabs.kyc },
     { key: 'agreement', label: t.tabs.agreement },
     { key: 'ledger', label: t.tabs.ledger },
+    { key: 'payments', label: strings.payments.driverTab.payments },
     { key: 'activity', label: t.tabs.activity },
   ];
 
@@ -111,6 +113,11 @@ export default function DriverDetailPage() {
         {tab === 'ledger' && (
           <div className="rounded-lg border border-slate-200 bg-white p-4">
             <LedgerTab driverId={driver.id} />
+          </div>
+        )}
+        {tab === 'payments' && (
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <DriverPaymentsTab driverId={driver.id} />
           </div>
         )}
         {tab === 'activity' && <ActivityTab driver={driver} />}

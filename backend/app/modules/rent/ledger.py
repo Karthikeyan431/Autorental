@@ -236,3 +236,16 @@ def totals_for(session: Session, *, now: datetime, driver_ids: Sequence[int] | N
         query = query.where(figures.c.driver_id.in_(list(driver_ids)))
     outstanding, overdue = session.execute(query).one()
     return Position(int(outstanding), int(overdue))
+
+
+def driver_outstanding_through(
+    session: Session, driver_id: int, day: date, *, now: datetime
+) -> int:
+    """Outstanding on the driver's days up to and including `day` (rule 18; D57 decision 4)."""
+    figures = charge_figures(now)
+    total = session.scalar(
+        select(_zero(func.sum(figures.c.balance))).where(
+            figures.c.driver_id == driver_id, figures.c.rent_date <= day
+        )
+    )
+    return int(total or 0)

@@ -25,6 +25,8 @@ from app.modules.drivers.router import router as drivers_router
 from app.modules.health.router import router as health_router
 from app.modules.kyc.router import router as kyc_router
 from app.modules.kyc.service import count_simulated_current_checks
+from app.modules.pay_requests.router import router as pay_requests_router
+from app.modules.payments.router import router as payments_router
 from app.modules.rent.router import router as rent_router
 from app.modules.settings.router import router as settings_router
 from app.modules.users.router import router as users_router
@@ -104,6 +106,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         vehicles_router,
         agreements_router,
         rent_router,
+        pay_requests_router,
+        payments_router,
     ):
         app.include_router(router, prefix=API_PREFIX)
     return app

@@ -34,10 +34,10 @@ Status codes:
 | Vehicles | `GET, POST /vehicles` (`?status=&search=`) · `GET /vehicles/summary` · `GET, PATCH /vehicles/{id}` · `POST /vehicles/{id}/status` · `GET, POST /vehicles/{id}/compliance` · `GET, POST /vehicles/{id}/maintenance` | Staff, owner |
 | Agreements | `GET, POST /agreements` (`?status=&driver_id=&vehicle_id=&search=`) · `GET /agreements/eligibility?driver_id&vehicle_id&start_date` (live panel) · `GET /agreements/{id}` · `POST /agreements/{id}/activate` · `/end` · `/cancel` · `GET /agreements/{id}/print` (PDF) · `POST /agreements/{id}/signed-copy` | Read: everyone; writes and print: `agreements.manage`, any driver (D54) |
 | Rent | `GET /drivers/{id}/ledger?from&to` (owner, current manager, `reports.all`; else 404) · `GET /rent/overdue` · `GET /rent/summary` (dashboard cards) · `GET /adjustments?status=pending` · `POST /rent/charges/{id}/adjustments` (`adjustments.request`) · `POST /adjustments/{id}/decision` (owner, `adjustments.decide`) · `POST /jobs/accrue` (owner, manual run) | Lists and figures: business-wide for the owner and `reports.all`, otherwise own drivers (N1, D54) |
-| Pay requests | `GET /pay-requests?date=` · `POST /pay-requests/generate` (idempotent) · `GET /pay-requests/{id}` (link, QR, WhatsApp URL) · `GET /pay-requests/{id}/qr.png` · `POST /pay-requests/{id}/sent` | Staff, owner |
-| Payments | `GET, POST /payments` · `GET /payments/{id}` · `PUT /payments/{id}/allocations` (confirm days) · `POST /payments/approve` (ids[]) · `POST /payments/{id}/reject` · `GET /payments/{id}/receipt.pdf` · `POST /payments/{id}/reversal-requests` · `POST /reversal-requests/{id}/decision` (owner) | Staff record; owner approves |
+| Pay requests | `GET /pay-requests?date=&mine=` · `POST /pay-requests/generate` (idempotent) · `GET /pay-requests/{id}` (link, QR, WhatsApp URL) · `GET /pay-requests/{id}/qr.png` · `POST /pay-requests/{id}/sent` | Generate and send: `payrequests.send`. Lists and single requests: the owner, the current manager and `reports.all` (D54, D57) |
+| Payments | `GET, POST /payments` (`?status=&driver_id=&recorded_by=&method=`; POST is multipart with a required `proof` photo and an `idempotency_key`) · `GET /payments/summary` · `GET /payments/{id}` · `GET /payments/{id}/suggestion` · `PUT /payments/{id}/allocations` (confirm days, while awaiting approval; replaces) · `POST /payments/{id}/allocations` (apply leftover credit of an approved payment; add-only) · `POST /payments/approve` (ids[]; one result per payment) · `POST /payments/{id}/reject` · `GET /payments/{id}/receipt.pdf` · `POST /payments/{id}/reversal-requests` · `GET /reversal-requests` (owner) · `POST /reversal-requests/{id}/decision` (owner) | Record: `payments.record`, any driver. See a payment: money viewers and its recorder. Days and credit: money viewers (D57). Approve and reject: owner |
 | Statements | `GET, POST /bank-statements` (upload) · `GET, POST /bank-profiles` · `GET /bank-statements/{id}/lines` · `POST /statement-lines/{id}/match` · `POST /statement-lines/{id}/ignore` · `POST /bank-statements/{id}/confirm-strong` | Owner; staff with `statements.upload` |
-| Advance | `GET /drivers/{id}/advance` · `POST /advance/adjustments` · `POST /advance/{id}/decision` (owner) | Staff request; owner decides |
+| Advance | `GET /drivers/{id}/advance` · `POST /advance/adjustments` · `POST /advance/refunds` (refused while refunds are off, Q5) · `GET /advance/pending` (owner) · `POST /advance/{id}/decision` (owner) | Staff request (`adjustments.request`, money viewers); owner decides |
 | Escalations | `GET, POST /escalations` (POST: owner) · `GET /escalations/{id}` · `POST /escalations/{id}/events` · `POST /escalations/{id}/close` (owner) · `GET /escalations/suggested` (owner) | Owner; assigned staff |
 | Notifications | `GET /notifications` · `POST /notifications/{id}/read` · `POST /push/subscriptions` · `DELETE /push/subscriptions/{id}` · `GET /push/vapid-public-key` | Everyone |
 | Dashboard | `GET /dashboard/owner` · `GET /dashboard/staff` | Owner; staff |
@@ -142,6 +142,38 @@ Status codes:
 | `ADJUSTMENT_TOO_LARGE` | 409 | An adjustment that would take the day below 0 or below what approved payments already cover (checked when requested and when approved) |
 | `ADJUSTMENT_ALREADY_DECIDED` | 409 | Deciding an adjustment twice |
 
+## Pay requests and payments (Week 6)
+
+| Code | Status | When |
+| --- | --- | --- |
+| `UPI_ID_NOT_SET` | 409 | Generating pay requests (or a QR) while no business UPI ID is set: "Set the business UPI ID in Settings". The pay request CLI exits 1 with the same message |
+| `PAY_REQUEST_NOT_OPEN` | 409 | Marking a paid or superseded request as sent |
+| `PROOF_REQUIRED` | 422 | A staff-recorded payment without a proof photo (D57 decision 3) |
+| `REFERENCE_REQUIRED` | 409 | A UPI payment without its reference or UTR |
+| `DUPLICATE_REFERENCE` | 409 | The UPI reference is already on a payment that is not rejected or reversed |
+| `IDEMPOTENCY_KEY_REUSED` | 409 | The same `idempotency_key` sent with different payment details (an identical repeat returns the first payment) |
+| `RECEIVED_DATE_IN_FUTURE` | 409 | A received date after today |
+| `NO_AGREEMENT` | 409 | Rent for a driver with no active or ended agreement, or a deposit without an active or draft agreement |
+| `DAYS_CONFIRM_NOT_ALLOWED` | 403 | Confirming days, applying credit or asking for the suggestion by someone who may see the payment but not the driver's money (D57 decision 1) |
+| `DEPOSIT_NOT_ALLOCATED` | 409 | Allocating an advance deposit to days (use an advance adjustment) |
+| `ALLOCATION_WRONG_DRIVER` | 409 | A chosen day is not one of the payment's driver's days (rule 4) |
+| `ALLOCATION_FUTURE_DAY` | 409 | A chosen day has not started yet (Q16) |
+| `ALLOCATION_DUPLICATE_DAY` | 409 | The same day twice in one request |
+| `ALLOCATION_EXCEEDS_DAY` | 409 | More than is left on the day after every other claim, waiting ones included (`details.available_paise`) |
+| `ALLOCATION_EXCEEDS_PAYMENT` | 409 | The days add up to more than the payment's unallocated amount |
+| `PAYMENT_NOT_AWAITING_APPROVAL` | 409 | Confirming days on, approving or rejecting a payment that is already decided |
+| `PAYMENT_NOT_APPROVED` | 409 | Applying credit from, or asking to reverse, a payment that is not approved |
+| `PAYMENT_NO_LONGER_FITS` | 409 (per payment in the approve results) | A day no longer has room for the payment at approval (another payment or a waiver was approved first); the rest are approved |
+| `RECEIPT_NOT_ISSUED` | 409 | A receipt for a payment that was never approved |
+| `REVERSAL_ALREADY_REQUESTED` | 409 | A second waiting reversal request for the same payment |
+| `REVERSAL_ALREADY_DECIDED` | 409 | Deciding a reversal twice |
+| `ADVANCE_ADJUSTMENTS_OFF` | 409 | Proposing or approving an advance adjustment while the setting is off (rule 5) |
+| `ADVANCE_INSUFFICIENT` | 409 | More than the advance balance less pending uses (`details.available_paise`) |
+| `ADVANCE_NO_LONGER_FITS` | 409 | At approval, a day of the adjustment no longer has room |
+| `ADVANCE_ALREADY_DECIDED` | 409 | Deciding an advance transaction twice |
+| `ADVANCE_IN_USE` | 409 | Reversing a deposit whose advance is already used or waiting to be used |
+| `REFUNDS_DISABLED` | 409 | Asking for or approving a refund while refunds are off (Q5) |
+
 ## Report keys
 
 `driver-ledger`, `vehicle-summary`, `daily-collection` (by date received and by rent day, Q19), `monthly-collection`, `outstanding`, `overdue`, `payment-history`, `approvals`, `advance-balances`, `active-agreements`, `kyc-status`, `escalations`, `staff-performance`.
@@ -157,5 +189,5 @@ Owner-only codes cannot be granted to staff.
 | Code | Covers | Staff default | Grantable to staff |
 | --- | --- | --- | --- |
 | `drivers.restrict` | Place or lift a restriction; suspend or reactivate a driver | Off | Yes |
-| `adjustments.request` | Request a charge adjustment | On | n/a |
+| `adjustments.request` | Request a charge adjustment, a payment reversal or an advance adjustment (Week 6) | On | n/a |
 | `adjustments.decide` | Decide a charge adjustment | Off | Never (owner only) |

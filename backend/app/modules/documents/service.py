@@ -23,6 +23,8 @@ from app.modules.documents.models import Document, DocumentAccessLog
 from app.modules.drivers.access import is_owner_or_manager, not_found
 from app.modules.drivers.models import Driver
 from app.modules.kyc.models import KycCheck
+from app.modules.payments.access import can_view_payment
+from app.modules.payments.models import Payment
 
 
 def store_document(
@@ -60,6 +62,9 @@ def document_driver(session: Session, document: Document) -> Driver | None:
     if document.owner_type == "agreement":
         agreement = session.get(Agreement, document.owner_id)
         return session.get(Driver, agreement.driver_id) if agreement is not None else None
+    if document.owner_type == "payment":
+        payment = session.get(Payment, document.owner_id)
+        return session.get(Driver, payment.driver_id) if payment is not None else None
     check = session.get(KycCheck, document.owner_id)
     return session.get(Driver, check.driver_id) if check is not None else None
 
@@ -79,6 +84,12 @@ def get_visible_document(session: Session, user: CurrentUser, document_id: int) 
         raise not_found()
     if document.doc_type == "driver_photo":
         return document  # every signed-in user sees driver photos (N1)
+    if document.owner_type == "payment":
+        # Payment proof (Week 6): whoever may see the payment (D57 decision 1).
+        payment = session.get(Payment, document.owner_id)
+        if payment is None or not can_view_payment(user, payment, driver):
+            raise not_found()
+        return document
     # D46: KYC document images show masked values in full: owner and current manager only.
     if not is_owner_or_manager(user, driver):
         raise not_found()

@@ -85,6 +85,7 @@ docs/        requirements, rules, data model, milestones
 cd backend; ..\.venv\Scripts\alembic upgrade head
 cd backend; ..\.venv\Scripts\python -m app.jobs.run_all   # scheduled jobs once (licence expiry, vehicle papers)
 cd backend; ..\.venv\Scripts\python -m app.jobs.accrue    # rent accrual once (idempotent; exits 1 until the rent due time is set)
+cd backend; ..\.venv\Scripts\python -m app.jobs.pay_requests   # today's pay requests once (idempotent; nothing before pay_request_time; exits 1 until the UPI ID is set)
 ```
 
 CI: `.github/workflows/checks.yml` runs the same checks on GitHub (push to master, pull requests).

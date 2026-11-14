@@ -229,8 +229,14 @@ def test_the_same_upi_reference_cannot_be_recorded_twice(db: Session, s: Scene) 
         "recorded_by, status) VALUES (:d, 100, 'upi', 'upi_direct', 'TESTUTR0001', "
         "'2026-11-01', :u, :status)"
     )
+    # Week 6 (0008): a rejected payment records who rejected it, when and why.
+    rejected = text(
+        "INSERT INTO payments (driver_id, amount_paise, method, source, reference, received_on, "
+        "recorded_by, status, rejected_by, rejected_at, rejection_reason) VALUES (:d, 100, "
+        "'upi', 'upi_direct', 'TESTUTR0001', '2026-11-01', :u, 'rejected', :u, now(), 'Test')"
+    )
     params = {"d": s.driver.id, "u": s.staff.id}
-    db.execute(insert, {**params, "status": "rejected"})  # a rejected one releases it
+    db.execute(rejected, params)  # a rejected one releases it
     db.execute(insert, {**params, "status": "awaiting_approval"})
     with pytest.raises(IntegrityError, match="unique_payment_reference"), db.begin_nested():
         db.execute(insert, {**params, "status": "awaiting_approval"})

@@ -19,7 +19,9 @@ import {
 } from '../agreements/api';
 import { DecideButtons } from '../agreements/components';
 import { fetchVehicleSummary } from '../autos/api';
+import { listDrivers } from '../drivers/api';
 import { fetchQueueCounts } from '../kyc/api';
+import { fetchPaymentsSummary } from '../payments/api';
 import { DashboardCards } from './DashboardCards';
 
 const d = strings.dashboard;
@@ -34,6 +36,14 @@ export default function OwnerDashboardPage() {
   const a = autos.data;
   const rent = useQuery({ queryKey: ['rent-summary'], queryFn: fetchRentSummary });
   const r = rent.data;
+  const payments = useQuery({ queryKey: ['payments-summary'], queryFn: fetchPaymentsSummary });
+  const pay = payments.data;
+  // Q28: active accounts whose identity and licence are both approved (the drivers list filter).
+  const approved = useQuery({
+    queryKey: ['drivers', 'active-verified-count'],
+    queryFn: () =>
+      listDrivers({ page: 1, search: '', status: 'active', managedBy: '', kyc: 'verified' }),
+  });
   return (
     <section className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -59,7 +69,13 @@ export default function OwnerDashboardPage() {
             to: '/agreements',
             linkLabel: d.openAgreements,
           },
-          { label: d.activeDriversApproved, week: 3 },
+          {
+            label: d.activeDriversApproved,
+            week: 3,
+            value: approved.data ? approved.data.total : null,
+            to: '/drivers',
+            linkLabel: d.openDrivers,
+          },
           {
             label: d.kycWaiting,
             week: 3,
@@ -89,7 +105,20 @@ export default function OwnerDashboardPage() {
             linkLabel: d.openAutos,
           },
           { label: d.adjustmentsPending, week: 5, value: r ? r.adjustments_pending : null },
-          { label: d.awaitingApproval, week: 6 },
+          {
+            label: d.awaitingApproval,
+            week: 6,
+            value: pay ? `${pay.awaiting_count} · ${formatRupees(pay.awaiting_paise)}` : null,
+            to: '/payments?tab=queue',
+            linkLabel: d.openPayments,
+          },
+          {
+            label: d.payRequestsToday,
+            week: 6,
+            value: pay ? d.requestsFigure(pay.sent_today, pay.paid_today, pay.unpaid_today) : null,
+            to: '/pay-requests',
+            linkLabel: d.openPayRequests,
+          },
           { label: d.openEscalations, week: 7 },
         ]}
       />

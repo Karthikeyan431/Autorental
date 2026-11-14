@@ -28,7 +28,7 @@ def test_on_in_development_with_the_flag(app_engine: Engine, clean_db: None) -> 
     )
     assert scheduler is not None
     try:
-        assert [job.id for job in scheduler.get_jobs()] == ["rent-accrual"]
+        assert sorted(job.id for job in scheduler.get_jobs()) == ["pay-requests", "rent-accrual"]
     finally:
         scheduler.shutdown(wait=False)
 

@@ -182,6 +182,11 @@ def decide_adjustment(
         reason=data.reason,
         ip=ip,
     )
+    if adjustment.status == "approved":
+        # D57 decision 4: a waiver can clear what a pay request asks for.
+        from app.modules.pay_requests.service import refresh_pay_request_status
+
+        refresh_pay_request_status(session, charge.driver_id, now=moment, actor_id=user.id)
     return adjustment
 
 
