@@ -3,8 +3,8 @@
 Rows are added to the caller's session and flushed, never committed, so they work with the
 rolled-back `db` fixture and with committing sessions alike.
 
-`insert_approved_payment` is the only place a payment or allocation is created in Week 5: the
-worked example in docs/rent-and-payments.md §1 needs one (D50). Week 6 builds the real flow.
+`insert_approved_payment` writes a payment and its allocations directly (D50), for ledger tests
+that are not about the payment flow. The Week 6 tests use the real services.
 """
 
 from dataclasses import dataclass
@@ -58,6 +58,9 @@ def make_settings_version(
     weekly_pay_day: int = 1,
     due_day_offset: int = 0,
     max_backdate_days: int = 7,
+    upi_id: str | None = None,
+    advance_adjustments_enabled: bool = True,
+    refunds_enabled: bool = False,
 ) -> SettingsVersion:
     version = SettingsVersion(
         effective_from=effective_from,
@@ -67,6 +70,10 @@ def make_settings_version(
         max_backdate_days=max_backdate_days,
         whatsapp_template=DEFAULT_WHATSAPP_TEMPLATE,
         business_name="Test Auto Rentals",
+        business_upi_id=upi_id,
+        upi_payee_name="Test Auto Rentals" if upi_id else None,
+        advance_adjustments_enabled=advance_adjustments_enabled,
+        refunds_enabled=refunds_enabled,
     )
     db.add(version)
     db.flush()
@@ -215,6 +222,13 @@ def insert_approved_payment(
     if status == "approved":
         payment.approved_by = recorder.id
         payment.approved_at = ist(received_on, 12)
+        # Week 6: an approved payment always has a receipt number (migration 0008).
+        payment.receipt_no = f"RCPT/2026-27/{900000 + next(_numbers):06d}"
+    if status == "rejected":
+        # Week 6 (0008): a rejected payment records who rejected it, when and why.
+        payment.rejected_by = recorder.id
+        payment.rejected_at = ist(received_on, 12)
+        payment.rejection_reason = "Test rejection"
     db.add(payment)
     db.flush()
     for charge, amount in allocations:

@@ -11,7 +11,14 @@ from app.modules.auth.models import AuthSession, LoginAttempt, RecoveryCode
 from app.modules.documents.models import Document, DocumentAccessLog
 from app.modules.drivers.models import Consent, Driver, DriverManagerHistory, DriverRestriction
 from app.modules.kyc.models import IdentityDetails, KycCheck, KycEvent, LicenceDetails
-from app.modules.payments.models import AdvanceTransaction, Payment, PaymentAllocation
+from app.modules.pay_requests.models import PayRequest
+from app.modules.payments.models import (
+    AdvanceTransaction,
+    Payment,
+    PaymentAllocation,
+    ReceiptCounter,
+    ReversalRequest,
+)
 from app.modules.rent.models import ChargeAdjustment, RentCharge
 from app.modules.settings.models import SettingsVersion
 from app.modules.users.models import User, UserPermission
@@ -36,10 +43,13 @@ __all__ = [
     "LicenceDetails",
     "LoginAttempt",
     "MaintenanceRecord",
+    "PayRequest",
     "Payment",
     "PaymentAllocation",
+    "ReceiptCounter",
     "RecoveryCode",
     "RentCharge",
+    "ReversalRequest",
     "SettingsVersion",
     "User",
     "UserPermission",

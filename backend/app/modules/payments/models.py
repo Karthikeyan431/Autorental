@@ -1,8 +1,8 @@
-"""Payments, allocations and advance transactions (docs/data-model.md; structure only in Week 5).
+"""Payments, allocations, advance transactions, reversal requests and receipt counters
+(docs/data-model.md; docs/rent-and-payments.md §3, §5 to §7).
 
-Created in migration 0007 because the day balance reads them (D50). There is no endpoint and
-no code path that creates a payment, an allocation or an advance transaction until Week 6; only
-the tests insert rows.
+Created in migration 0007 because the day balance reads them (D50); Week 6 (migration 0008)
+adds the approval, rejection, reversal and receipt columns.
 
 An allocation counts toward a day's balance only when it is not reversed and its payment (or
 advance transaction) is approved (rule 13).
@@ -16,6 +16,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.db import Base, TimestampMixin
 
 PAYMENT_STATUSES = ("awaiting_approval", "approved", "rejected", "reversed")
+PAYMENT_METHODS = ("upi", "cash")
+PAYMENT_SOURCES = ("pay_request", "upi_direct", "cash_office")
+PAYMENT_PURPOSES = ("rent", "advance_deposit")
+ADVANCE_KINDS = ("deposit", "adjustment", "refund", "reversal")
 
 
 class Payment(TimestampMixin, Base):
@@ -31,7 +35,7 @@ class Payment(TimestampMixin, Base):
     purpose: Mapped[str] = mapped_column(Text, nullable=False, server_default="rent")
     reference: Mapped[str | None] = mapped_column(Text)
     received_on: Mapped[date] = mapped_column(Date, nullable=False)
-    pay_request_id: Mapped[int | None] = mapped_column(BigInteger)  # FK added in Week 6
+    pay_request_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("pay_requests.id"))
     statement_line_id: Mapped[int | None] = mapped_column(BigInteger)  # FK added in Week 7
     proof_document_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("documents.id"))
     recorded_by: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), nullable=False)
@@ -39,7 +43,12 @@ class Payment(TimestampMixin, Base):
     approved_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     rejection_reason: Mapped[str | None] = mapped_column(Text)
+    rejected_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id"))
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reversed_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id"))
+    reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     receipt_no: Mapped[str | None] = mapped_column(Text, unique=True)
+    receipt_cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     idempotency_key: Mapped[str | None] = mapped_column(Text, unique=True)
 
 
@@ -82,3 +91,30 @@ class PaymentAllocation(TimestampMixin, Base):
     reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reversed_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id"))
     reversal_reason: Mapped[str | None] = mapped_column(Text)
+
+
+class ReversalRequest(TimestampMixin, Base):
+    """Q4: staff ask for a payment (or one allocation) to be reversed; the owner decides."""
+
+    __tablename__ = "reversal_requests"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    payment_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("payments.id"))
+    allocation_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("payment_allocations.id")
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    requested_by: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), nullable=False)
+    decision: Mapped[str | None] = mapped_column(Text)  # NULL = pending
+    decided_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id"))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decision_reason: Mapped[str | None] = mapped_column(Text)
+
+
+class ReceiptCounter(TimestampMixin, Base):
+    """One row per financial year; row-locked while a number is issued, so there are no gaps."""
+
+    __tablename__ = "receipt_counters"
+
+    financial_year: Mapped[str] = mapped_column(Text, primary_key=True)
+    last_number: Mapped[int] = mapped_column(BigInteger, nullable=False)
