@@ -28,7 +28,7 @@ describe('App shell', () => {
   });
 
   // Screens that later milestones build still show their placeholder.
-  it.each(APP_PAGES.filter((p) => p.week > 5).map((p) => [p.path, p.title, p.week] as const))(
+  it.each(APP_PAGES.filter((p) => p.week > 6).map((p) => [p.path, p.title, p.week] as const))(
     '%s shows its empty page',
     (path, title, week) => {
       renderApp(path.replace(':id', '1'));
