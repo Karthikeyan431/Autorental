@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # The demo method (made-up details, marked simulated). Development and test only; production
     # refuses to start with it on (check_production_safety) or with a simulated current check.
     DEMO_VERIFIER_ENABLED: bool = False
+    # Development only: run rent accrual every 15 minutes inside the API process (APScheduler).
+    # Production uses the systemd timer (Week 8) and refuses to start with this on.
+    DEV_SCHEDULER_ENABLED: bool = False
 
     # Sign-in throttle per IP address: this many failures within the window gives 429.
     LOGIN_IP_MAX_FAILURES: int = Field(default=20, ge=1)
@@ -101,6 +104,8 @@ def check_production_safety(settings: Settings) -> None:
 
     if settings.DEMO_VERIFIER_ENABLED:
         problems.append("DEMO_VERIFIER_ENABLED must be false in production")
+    if settings.DEV_SCHEDULER_ENABLED:
+        problems.append("DEV_SCHEDULER_ENABLED must be false in production (use the timer)")
 
     secret_key = settings.SECRET_KEY.get_secret_value()
     if len(secret_key) < _MIN_SECRET_KEY_LENGTH or _is_placeholder(secret_key):

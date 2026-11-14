@@ -1,7 +1,8 @@
 """Rule 10: the single eligibility check, exactly as in docs/kyc.md.
 
-Agreement activation (Week 5) calls `check_eligibility()` inside its transaction with row
-locks. Reasons come back in a fixed order so the UI and tests can rely on them.
+Agreement activation (app.modules.agreements.service) calls `check_eligibility()` inside its
+transaction with row locks, on the start date and on today (D51). Reasons come back in a
+fixed order so the UI and tests can rely on them.
 
 Decision (Week 3 plan): a licence whose status is `expired` (set by the licence-expiry job)
 reports LICENCE_EXPIRED rather than LICENCE_NOT_APPROVED.
@@ -14,6 +15,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.modules.agreements.models import Agreement
 from app.modules.drivers.models import Driver, DriverRestriction
 from app.modules.kyc.models import KycCheck, LicenceDetails
 
@@ -68,9 +70,13 @@ def has_blocking_restriction(session: Session, driver_id: int) -> bool:
 
 
 def has_active_agreement(session: Session, driver_id: int) -> bool:
-    """Rule 2. Agreements arrive in Week 5; until then no driver can hold one."""
-    del session, driver_id
-    return False
+    """Rule 2: the driver already has an auto. The database refuses a second active agreement
+    too (partial unique index, migration 0007)."""
+    return bool(
+        session.scalar(
+            select(exists().where(Agreement.driver_id == driver_id, Agreement.status == "active"))
+        )
+    )
 
 
 def check_eligibility(

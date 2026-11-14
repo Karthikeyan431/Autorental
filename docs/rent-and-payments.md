@@ -79,7 +79,7 @@ Before the owner approves the ₹700, outstanding is ₹1,200 and every day show
 
 All in one database transaction:
 1. Lock the payment row (or the advance transaction).
-2. Lock the chosen `rent_charges` rows **in id order**, so two staff members cannot deadlock.
+2. Lock the agreement rows of the chosen days **in id order**, so two staff members cannot deadlock. (`rent_charges` is insert-only, so the app role cannot lock its rows; D53.)
 3. Check that each day belongs to this driver's agreement, has already accrued (no future days, Q16), and that each amount fits the day's balance *including other pending allocations*, and the total fits the payment's unallocated amount.
 4. Write the allocations and the audit entry, then commit.
 
@@ -90,6 +90,7 @@ Any amount staff do not allocate stays as unallocated credit on that payment unt
 - Nothing financial is edited or deleted. A wrong allocation is **reversed**, which restores the day's balance.
 - A wrong approved payment gets a **reversal**: staff request it, the owner decides (Q4). Its allocations are reversed and its receipt is marked cancelled.
 - A wrong charge, such as a mistyped rate, gets an owner-approved **charge adjustment** with a reason; the original charge stays.
+- **A return recorded late** (D52): the return date may be in the past. Every charge already created after it stays, and each gets a pending waiver of its full net charge ("Returned on <date>, recorded late") for the owner to decide.
 - **Advance:** a deposit is a payment with purpose `advance_deposit` (it also needs approval). Using advance against rent means staff propose the amount and days, and nothing changes until the owner approves. A setting can switch adjustments off. Refunds stay off until Q5 is answered.
 
 ## 8. Overdue and escalation (rule 15)

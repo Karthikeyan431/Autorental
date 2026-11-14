@@ -103,7 +103,7 @@ describe('Autos', () => {
     renderApp('/autos/3', { user: staffUser });
     expect(
       await screen.findByText(
-        'Rented autos change status only through their agreement (from Week 5).',
+        'Rented autos change status only through their agreement.',
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Mark as/ })).not.toBeInTheDocument();

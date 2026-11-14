@@ -45,6 +45,12 @@ explicit_package_bases = true
 module = ["qrcode", "qrcode.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# reportlab (agreement PDF, app/modules/agreements/pdf.py) and APScheduler 3 (development
+# scheduler, app/core/scheduler.py) ship no type hints; stub packages would be new dependencies.
+module = ["reportlab", "reportlab.*", "apscheduler", "apscheduler.*"]
+ignore_missing_imports = true
+
 [tool.pydantic-mypy]
 init_forbid_extra = true
 init_typed = true

@@ -15,6 +15,8 @@ from app.core.db import make_engine, make_sessionmaker
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.request_context import REQUEST_ID_HEADER, RequestIdMiddleware
+from app.core.scheduler import start_dev_scheduler
+from app.modules.agreements.router import router as agreements_router
 from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import CSRF_HEADER
 from app.modules.auth.router import router as auth_router
@@ -23,6 +25,7 @@ from app.modules.drivers.router import router as drivers_router
 from app.modules.health.router import router as health_router
 from app.modules.kyc.router import router as kyc_router
 from app.modules.kyc.service import count_simulated_current_checks
+from app.modules.rent.router import router as rent_router
 from app.modules.settings.router import router as settings_router
 from app.modules.users.router import router as users_router
 from app.modules.vehicles.router import router as vehicles_router
@@ -43,7 +46,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 f"Refusing to start: {simulated} current KYC check(s) are simulated (demo). "
                 "Reopen or redo them with a real method outside production first."
             )
-    yield
+    scheduler = start_dev_scheduler(app.state.settings, app.state.sessionmaker)
+    try:
+        yield
+    finally:
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -94,6 +102,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         kyc_router,
         documents_router,
         vehicles_router,
+        agreements_router,
+        rent_router,
     ):
         app.include_router(router, prefix=API_PREFIX)
     return app

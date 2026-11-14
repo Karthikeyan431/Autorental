@@ -1,6 +1,8 @@
 import type { ComponentType } from 'react';
 
+import AgreementDetailPage from '../features/agreements/AgreementDetailPage';
 import AgreementsPage from '../features/agreements/AgreementsPage';
+import NewAgreementPage from '../features/agreements/NewAgreementPage';
 import AuditLogPage from '../features/audit/AuditLogPage';
 import type { Role, User } from '../features/auth/api';
 import ChangePasswordPage from '../features/auth/ChangePasswordPage';
@@ -144,6 +146,25 @@ export const APP_PAGES: AppPage[] = [
     week: 5,
     Component: AgreementsPage,
     inNav: true,
+    group: 'fleet',
+    inShell: true,
+  },
+  {
+    path: '/agreements/new',
+    title: p.newAgreement,
+    week: 5,
+    Component: NewAgreementPage,
+    inNav: false,
+    group: 'fleet',
+    inShell: true,
+    access: { permission: 'agreements.manage' },
+  },
+  {
+    path: '/agreements/:id',
+    title: p.agreement,
+    week: 5,
+    Component: AgreementDetailPage,
+    inNav: false,
     group: 'fleet',
     inShell: true,
   },

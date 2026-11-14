@@ -18,6 +18,7 @@ from app.core.config import Settings
 from app.core.files import document_store, prepare_upload
 from app.core.permissions import CurrentUser
 from app.core.time import utc_now
+from app.modules.agreements.models import Agreement
 from app.modules.documents.models import Document, DocumentAccessLog
 from app.modules.drivers.access import is_owner_or_manager, not_found
 from app.modules.drivers.models import Driver
@@ -56,14 +57,18 @@ def store_document(
 def document_driver(session: Session, document: Document) -> Driver | None:
     if document.owner_type == "driver":
         return session.get(Driver, document.owner_id)
+    if document.owner_type == "agreement":
+        agreement = session.get(Agreement, document.owner_id)
+        return session.get(Driver, agreement.driver_id) if agreement is not None else None
     check = session.get(KycCheck, document.owner_id)
     return session.get(Driver, check.driver_id) if check is not None else None
 
 
 def get_visible_document(session: Session, user: CurrentUser, document_id: int) -> Document:
     """The document if this user may see it, else 404 (never 403: docs/security.md). Driver
-    photos and vehicle papers: every signed-in user (N1). KYC documents: the owner and the
-    current manager (D46)."""
+    photos and vehicle papers: every signed-in user (N1). KYC documents and signed agreement
+    copies (which show the driver's personal details): the owner and the current manager
+    (D46, D55)."""
     document = session.get(Document, document_id)
     if document is None or document.purged_at is not None:
         raise not_found()

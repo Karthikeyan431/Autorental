@@ -23,3 +23,12 @@ export function paiseToRupeesInput(paise: number): string {
   const rest = paise % 100;
   return rest === 0 ? String(rupees) : `${rupees}.${String(rest).padStart(2, '0')}`;
 }
+
+/** Signed rupees for adjustments: "-300" -> -30000, "50.5" -> 5050. Zero or junk -> null. */
+export function parseSignedRupeesToPaise(text: string): number | null {
+  const trimmed = text.trim();
+  const negative = trimmed.startsWith('-');
+  const paise = parseRupeesToPaise(negative ? trimmed.slice(1) : trimmed.replace(/^\+/, ''));
+  if (paise === null || paise === 0) return null;
+  return negative ? -paise : paise;
+}

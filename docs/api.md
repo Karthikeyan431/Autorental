@@ -32,8 +32,8 @@ Status codes:
 | KYC | `GET /kyc/queue?bucket=` · `GET /kyc/queue/counts` · `GET /drivers/{id}/kyc` · `POST /drivers/{id}/kyc/{identity\|licence}/attempts` · `GET /kyc/attempts/{id}` · `PUT /kyc/attempts/{id}/identity-details` · `PUT /kyc/attempts/{id}/licence-details` · `POST /kyc/attempts/{id}/documents` · `POST /kyc/attempts/{id}/uidai-qr` (deferred until N13 is answered, D48) · `POST /kyc/attempts/{id}/uidai-app-attestation` · `POST /kyc/attempts/{id}/parivahan-lookup` · `POST /kyc/attempts/{id}/submit` · `POST /kyc/attempts/{id}/decision` · `POST /kyc/attempts/{id}/reopen` (owner) · `GET /drivers/{id}/eligibility` | Staff, owner |
 | Documents | `GET /documents/{id}/content` (streamed, audited) · `GET /documents/{id}` (metadata) | By permission |
 | Vehicles | `GET, POST /vehicles` (`?status=&search=`) · `GET /vehicles/summary` · `GET, PATCH /vehicles/{id}` · `POST /vehicles/{id}/status` · `GET, POST /vehicles/{id}/compliance` · `GET, POST /vehicles/{id}/maintenance` | Staff, owner |
-| Agreements | `GET, POST /agreements` · `GET /agreements/{id}` · `POST /agreements/{id}/activate` · `/end` · `/cancel` · `GET /agreements/{id}/print` (PDF) · `POST /agreements/{id}/signed-copy` | Staff, owner |
-| Rent | `GET /drivers/{id}/ledger?from&to` · `GET /rent/overdue` · `POST /rent/charges/{id}/adjustments` (`adjustments.request`) · `POST /adjustments/{id}/decision` (owner, `adjustments.decide`) · `POST /jobs/accrue` (owner, manual run) | Staff, owner |
+| Agreements | `GET, POST /agreements` (`?status=&driver_id=&vehicle_id=&search=`) · `GET /agreements/eligibility?driver_id&vehicle_id&start_date` (live panel) · `GET /agreements/{id}` · `POST /agreements/{id}/activate` · `/end` · `/cancel` · `GET /agreements/{id}/print` (PDF) · `POST /agreements/{id}/signed-copy` | Read: everyone; writes and print: `agreements.manage`, any driver (D54) |
+| Rent | `GET /drivers/{id}/ledger?from&to` (owner, current manager, `reports.all`; else 404) · `GET /rent/overdue` · `GET /rent/summary` (dashboard cards) · `GET /adjustments?status=pending` · `POST /rent/charges/{id}/adjustments` (`adjustments.request`) · `POST /adjustments/{id}/decision` (owner, `adjustments.decide`) · `POST /jobs/accrue` (owner, manual run) | Lists and figures: business-wide for the owner and `reports.all`, otherwise own drivers (N1, D54) |
 | Pay requests | `GET /pay-requests?date=` · `POST /pay-requests/generate` (idempotent) · `GET /pay-requests/{id}` (link, QR, WhatsApp URL) · `GET /pay-requests/{id}/qr.png` · `POST /pay-requests/{id}/sent` | Staff, owner |
 | Payments | `GET, POST /payments` · `GET /payments/{id}` · `PUT /payments/{id}/allocations` (confirm days) · `POST /payments/approve` (ids[]) · `POST /payments/{id}/reject` · `GET /payments/{id}/receipt.pdf` · `POST /payments/{id}/reversal-requests` · `POST /reversal-requests/{id}/decision` (owner) | Staff record; owner approves |
 | Statements | `GET, POST /bank-statements` (upload) · `GET, POST /bank-profiles` · `GET /bank-statements/{id}/lines` · `POST /statement-lines/{id}/match` · `POST /statement-lines/{id}/ignore` · `POST /bank-statements/{id}/confirm-strong` | Owner; staff with `statements.upload` |
@@ -114,7 +114,7 @@ Status codes:
 | `KYC_METHOD_NOT_AVAILABLE` | 409 | A method not in the driver's `available_methods` (Week 4: `manual` for both checks, `parivahan_lookup` for the licence, `uidai_app_attested` with `AADHAAR_APP_ATTEST_ENABLED`, `demo` with `DEMO_VERIFIER_ENABLED` outside production; `uidai_qr` is never offered until it is built, D48) |
 | `VEHICLE_REGISTRATION_TAKEN` | 409 | An auto with this registration number exists (compared after removing spaces and hyphens and upper-casing) |
 | `VEHICLE_STATUS_NOT_ALLOWED` / `VEHICLE_RENTED` / `VEHICLE_STATUS_UNCHANGED` | 409 | Asking for `rented` (only agreements set it) / moving a rented auto / no change |
-| `VEHICLE_NOT_AVAILABLE` | 409 | Choosing an auto that is not `available` for an agreement (Week 5 calls `require_selectable_vehicle`) |
+| `VEHICLE_NOT_AVAILABLE` | 409 | Choosing an auto that is not `available` for an agreement draft |
 | `KYC_WRONG_METHOD` | 409 | A details, attestation or Parivahan endpoint used on an attempt of another method (`details.method` names it) |
 | `UIDAI_SIGNATURE_NOT_VALID` | 409 | Approving an attestation that recorded "signature not valid"; the record is kept, reject or ask again (D49) |
 | `LOOKUP_TIME_IN_FUTURE` | 422 | A Parivahan lookup time more than 5 minutes ahead of the server clock |
@@ -128,6 +128,19 @@ Status codes:
 | `DOC_TYPE_NOT_ALLOWED` | 422 | A document type that does not belong to this check |
 | `FILE_TYPE_NOT_ALLOWED` / `FILE_TOO_LARGE` / `IMAGE_TOO_LARGE` | 422 | Not a real JPEG, PNG or PDF / over 5 MB (images) or 10 MB (PDFs) / over 40 megapixels |
 | `DRIVER_STATUS_UNCHANGED` / `RESTRICTION_ALREADY_LIFTED` / `CONSENT_ALREADY_WITHDRAWN` | 409 | Repeating a status change |
+
+## Agreements and rent (Week 5)
+
+| Code | Status | When |
+| --- | --- | --- |
+| `RENT_DUE_TIME_NOT_SET` | 409 | Activation or accrual while no settings version is in force: "Set the rent due time in Settings" (D20). The accrual CLI exits 1 with the same message |
+| `NOT_ELIGIBLE` | 409 | Activation refused. `details.reasons` lists every code in a fixed order and `details.messages` explains each: the eligibility codes (`IDENTITY_NOT_APPROVED`, `LICENCE_NOT_APPROVED`, `LICENCE_EXPIRED`, `ACCOUNT_NOT_ACTIVE`, `BLOCKING_RESTRICTION`, `ALREADY_ASSIGNED`, `SIMULATED_VERIFICATION`, or `KYC_NOT_COMPLETE` for staff who may not see the KYC, D56), `DRIVER_PERIOD_OVERLAP`, `START_DATE_TOO_EARLY`, `START_DATE_IN_FUTURE`, `VEHICLE_NOT_AVAILABLE`, `VEHICLE_RETURNED_ON_START` / `VEHICLE_PERIOD_OVERLAP` (with `details.vehicle_available_from`) |
+| `START_DATE_TOO_EARLY` | 409 | A draft starting more than `max_backdate_days` before today (D51, N21) |
+| `AGREEMENT_OVERLAP` | 409 | The database refused a second active agreement or an overlapping period (rule 2) |
+| `AGREEMENT_INVALID_TRANSITION` | 409 | Activating or cancelling a non-draft, ending a non-active agreement, or a signed copy for a cancelled one |
+| `END_DATE_NOT_ALLOWED` | 409 | A return date before the start date or after today (D52) |
+| `ADJUSTMENT_TOO_LARGE` | 409 | An adjustment that would take the day below 0 or below what approved payments already cover (checked when requested and when approved) |
+| `ADJUSTMENT_ALREADY_DECIDED` | 409 | Deciding an adjustment twice |
 
 ## Report keys
 
