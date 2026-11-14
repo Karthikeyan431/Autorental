@@ -2,7 +2,7 @@
 
 Every dependency must be **free and open source** (hard constraint 1). Versions are pinned exactly; the lock files (`backend/requirements.lock`, `backend/requirements-dev.lock`, `frontend/package-lock.json`) are the final word. Update this file whenever a package is added or upgraded, and ask before adding anything not listed in `CLAUDE.md`.
 
-**Registry check:** every Week 1 version below was confirmed against PyPI (`pip index versions`) and npm (`npm view`) on **2026-11-12**, immediately before installing. The Week 2 packages (argon2-cffi, pyjwt, pyotp, cryptography, qrcode, react-hook-form, zod, @hookform/resolvers) were re-checked on **2026-11-13** and are installed. The Week 3 packages (python-multipart, pillow) were re-checked on **2026-11-13** and are installed; neither adds a dependency of its own. Packages for later weeks show the latest version on that date and are re-checked when they are added.
+**Registry check:** every Week 1 version below was confirmed against PyPI (`pip index versions`) and npm (`npm view`) on **2026-11-12**, immediately before installing. The Week 2 packages (argon2-cffi, pyjwt, pyotp, cryptography, qrcode, react-hook-form, zod, @hookform/resolvers) were re-checked on **2026-11-13** and are installed. The Week 3 packages (python-multipart, pillow) were re-checked on **2026-11-13** and are installed; neither adds a dependency of its own. The Week 5 packages (reportlab 5.1.0, apscheduler 3.11.3) were re-checked on **2026-11-14** (still the latest) and are installed. Packages for later weeks show the latest version on that date and are re-checked when they are added.
 
 ## Backend (Python 3.12)
 
@@ -33,7 +33,9 @@ Every dependency must be **free and open source** (hard constraint 1). Versions 
 | openpyxl | 3.1.5 | MIT | 7 | Bank statement XLSX, Excel export |
 | pywebpush | 2.5.0 | MPL-2.0 | 7 | Web Push |
 
-Transitive runtime packages (Starlette, anyio, Mako, python-dotenv and others) are pinned in `requirements.lock`. Week 2 added argon2-cffi-bindings 26.1.0 (MIT), cffi 2.1.1 (MIT-0), pycparser 3.12 (BSD-3-Clause) and colorama 0.4.6 (BSD-3-Clause, a qrcode dependency on Windows).
+Transitive runtime packages (Starlette, anyio, Mako, python-dotenv and others) are pinned in `requirements.lock`. Week 2 added argon2-cffi-bindings 26.1.0 (MIT), cffi 2.1.1 (MIT-0), pycparser 3.12 (BSD-3-Clause) and colorama 0.4.6 (BSD-3-Clause, a qrcode dependency on Windows). Week 5 added charset-normalizer 3.5.2 (MIT, a reportlab dependency) and tzlocal 5.4.5 (MIT, an APScheduler dependency); the existing pins were kept (no unrelated upgrade).
+
+`reportlab` and APScheduler 3 ship no type hints either; mypy ignores missing imports for them only (`pyproject.toml`), rather than adding stub packages.
 
 `qrcode` ships no type hints. Rather than add `types-qrcode`, mypy ignores missing imports for `qrcode` only (`pyproject.toml`).
 
